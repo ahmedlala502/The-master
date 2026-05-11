@@ -1,0 +1,33 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "experimentalDecorators": true,
+    "useDefineForClassFields": false,
+    "module": "ESNext",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "allowJs": true,
+    "jsx": "react-jsx",
+    "paths": { "@/*": ["./*"] },
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "strict": true
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx"],
+  "exclude": [
+    "src/pages/**",
+    "src/services/**",
+    "src/components/BlockerTab.tsx",
+    "src/components/CoverageTab.tsx",
+    "src/components/InfluencerWorkspace.tsx",
+    "src/components/Layout.tsx",
+    "src/components/views/OfficeMap.tsx",
+    "src/components/ui/**",
+    "src/lib/firebase.ts",
+    "src/lib/seed.ts",
+    "src/utils.ts"
+  ]
+}
