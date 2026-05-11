@@ -11,7 +11,7 @@ interface LoginProps {
 type AuthTab = 'signin' | 'signup';
 
 export default function Login({ onLogin, isLocked }: LoginProps) {
-  const { pendingSignups, requestSignup, settings } = useLocalData();
+  const { pendingSignups, users, requestSignup, settings } = useLocalData();
   const [tab, setTab] = useState<AuthTab>('signin');
   const [signinForm, setSigninForm] = useState({ email: '', password: '' });
   const [signupForm, setSignupForm] = useState({
@@ -33,6 +33,12 @@ export default function Login({ onLogin, isLocked }: LoginProps) {
     pendingSignups.forEach(request => map.set(request.email.toLowerCase(), true));
     return map;
   }, [pendingSignups]);
+
+  const approvedByEmail = useMemo(() => {
+    const map = new Map<string, boolean>();
+    users.forEach(user => map.set(user.email.toLowerCase(), true));
+    return map;
+  }, [users]);
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -72,7 +78,8 @@ export default function Login({ onLogin, isLocked }: LoginProps) {
     }
   };
 
-  const isPendingEmail = pendingByEmail.get(signinForm.email.trim().toLowerCase());
+  const normalizedSigninEmail = signinForm.email.trim().toLowerCase();
+  const isPendingEmail = Boolean(pendingByEmail.get(normalizedSigninEmail) && !approvedByEmail.get(normalizedSigninEmail));
 
   return (
     <div className="min-h-screen w-full bg-stone px-6 py-10">

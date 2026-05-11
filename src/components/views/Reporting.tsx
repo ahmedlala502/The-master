@@ -1,6 +1,5 @@
-import React, { useMemo, useState } from 'react';
+import React, { Suspense, lazy, useMemo, useState } from 'react';
 import { Handover, Priority, Shift, Status, Task } from '../../types';
-import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip as RechartsTooltip, XAxis, YAxis } from 'recharts';
 import { AlertCircle, ArrowDown, ArrowUp, Calendar, CheckCircle, Clock, Download, Filter, Globe, Loader2, Minus, MoreHorizontal, RefreshCw, Shield, Target, TrendingUp, Users, X } from 'lucide-react';
 import { COUNTRY_FLAGS, TEAMS } from '../../constants';
 import { motion } from 'motion/react';
@@ -57,6 +56,7 @@ const tooltipStyle = {
 };
 
 const now = new Date();
+const ReportingCharts = lazy(() => import('./ReportingCharts'));
 
 export default function Reporting({ tasks, handovers, stats }: ReportingProps) {
   const [teamFilter, setTeamFilter] = useState('All');
@@ -278,146 +278,21 @@ export default function Reporting({ tasks, handovers, stats }: ReportingProps) {
         ))}
       </div>
 
-      {/* ── Charts Row 1: Status + Priority + Shift ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Status Donut */}
-        <ChartCard title="Task Status" desc="Current state distribution">
-          <div className="relative" style={{ height: 200 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={statusData}
-                  dataKey="value"
-                  nameKey="name"
-                  innerRadius={50}
-                  outerRadius={78}
-                  paddingAngle={3}
-                  cornerRadius={4}
-                  strokeWidth={0}
-                >
-                  {statusData.map(e => (
-                    <Cell key={e.name} fill={STATUS_COLORS[e.name] || COLORS[0]} />
-                  ))}
-                </Pie>
-                <RechartsTooltip
-                  contentStyle={tooltipStyle}
-                  formatter={(v, n) => [`${v ?? 0} tasks (${total ? ((Number(v ?? 0) / total) * 100).toFixed(0) : 0}%)`, n]}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none" style={{ top: 2 }}>
-              <span className="text-2xl font-black relaxed-title text-ink">{total}</span>
-              <span className="text-[8px] font-bold text-muted uppercase tracking-widest">Total</span>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-1.5 mt-3">
-            {statusData.filter(s => s.value > 0).map(s => (
-              <div
-                key={s.name}
-                className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-stone/40 text-[9px] font-bold uppercase tracking-wide"
-              >
-                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: STATUS_COLORS[s.name] || COLORS[0] }} />
-                {s.name}
-                <span className="font-black text-ink tabular-nums">{s.value}</span>
-              </div>
-            ))}
-            {statusData.every(s => s.value === 0) && (
-              <p className="text-[9px] font-bold text-muted/40 text-center w-full py-4">No task data</p>
-            )}
-          </div>
-        </ChartCard>
-
-        {/* Priority Bar */}
-        <ChartCard title="Priority Breakdown" desc="Task distribution by urgency">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={priorityData} layout="vertical" margin={{ left: 10 }}>
-              <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E5E7EB" />
-              <XAxis type="number" hide />
-              <YAxis type="category" dataKey="name" axisLine={false} tickLine={false} width={70} tick={{ fontSize: 10, fontWeight: 700, fill: '#64748B' }} />
-              <RechartsTooltip contentStyle={tooltipStyle} />
-              <Bar dataKey="value" radius={[0, 6, 6, 0]} barSize={36}>
-                {priorityData.map(e => <Cell key={e.name} fill={PRIORITY_COLORS[e.name] || COLORS[0]} />)}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </ChartCard>
-
-        {/* Shift Lines */}
-        <ChartCard title="Shift Rhythm" desc="Open, closed & handovers by shift">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={shiftData}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-              <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 700, fill: '#64748B' }} />
-              <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 700, fill: '#64748B' }} />
-              <RechartsTooltip contentStyle={tooltipStyle} />
-              <Line type="monotone" dataKey="open" stroke="#EF4444" strokeWidth={2.5} dot={{ r: 3 }} />
-              <Line type="monotone" dataKey="closed" stroke="#10B981" strokeWidth={2.5} dot={{ r: 3 }} />
-              <Line type="monotone" dataKey="handovers" stroke="#F28C33" strokeWidth={2.5} dot={{ r: 3 }} />
-            </LineChart>
-          </ResponsiveContainer>
-        </ChartCard>
-      </div>
-
-      {/* ── Charts Row 2: Team + Country + Office ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <ChartCard title="Team Load" desc="Tasks & risks per team">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={teamData} margin={{ top: 10, right: 10, bottom: 0, left: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-              <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 9, fontWeight: 700, fill: '#64748B' }} />
-              <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 700, fill: '#64748B' }} />
-              <RechartsTooltip contentStyle={tooltipStyle} />
-              <Bar dataKey="value" name="Total" fill="#1E293B" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="risk" name="Risk" fill="#EF4444" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </ChartCard>
-
-        <ChartCard title="Country Distribution" desc="Regional workload">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={countryData} layout="vertical" margin={{ left: 24 }}>
-              <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E5E7EB" />
-              <XAxis type="number" hide />
-              <YAxis type="category" dataKey="name" axisLine={false} tickLine={false} width={60} tick={{ fontSize: 10, fontWeight: 700, fill: '#64748B' }} />
-              <RechartsTooltip contentStyle={tooltipStyle} />
-              <Bar dataKey="value" radius={[0, 6, 6, 0]} barSize={28}>
-                {countryData.map((e, i) => <Cell key={e.name} fill={COLORS[i % COLORS.length]} />)}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </ChartCard>
-
-        <ChartCard title="Office Health" desc="Workload & risk per office">
-          <div className="space-y-4 overflow-y-auto max-h-[280px] pr-1 custom-scrollbar">
-            {officeData.map((o, i) => {
-              const pct = total ? Math.round((o.value / total) * 100) : 0;
-              return (
-                <div key={o.name}>
-                  <div className="flex items-center justify-between text-[10px] font-bold mb-1.5">
-                    <span className="text-ink flex items-center gap-1.5">{o.name}</span>
-                    <span className={o.risk ? 'text-red-500' : 'text-muted'}>{o.value} tasks · {o.risk} risk</span>
-                  </div>
-                  <div className="h-2.5 bg-dawn/60 rounded-full overflow-hidden">
-                    <motion.div
-                      initial={{ width: 0 }}
-                      animate={{ width: `${pct}%` }}
-                      className="h-full rounded-full relative"
-                      style={{ backgroundColor: COLORS[i % COLORS.length] }}
-                    />
-                  </div>
-                  <div className="flex justify-between text-[8px] font-bold text-muted/40 mt-0.5">
-                    <span>{pct}% of total</span>
-                    {o.risk > 0 && <span className="text-red-400">{o.risk} risk</span>}
-                  </div>
-                </div>
-              );
-            })}
-            {officeData.length === 0 && (
-              <p className="text-xs font-bold text-muted/40 text-center py-8">No office data</p>
-            )}
-          </div>
-        </ChartCard>
-      </div>
+      <Suspense fallback={<ChartSkeleton />}>
+        <ReportingCharts
+          total={total}
+          statusData={statusData}
+          priorityData={priorityData}
+          shiftData={shiftData}
+          teamData={teamData}
+          countryData={countryData}
+          officeData={officeData}
+          statusColors={STATUS_COLORS}
+          priorityColors={PRIORITY_COLORS}
+          colors={COLORS}
+          tooltipStyle={tooltipStyle}
+        />
+      </Suspense>
 
       {/* ── User Performance Table ── */}
       <motion.div
@@ -538,16 +413,16 @@ function FilterSelect({ label, value, options, onChange }: { label: string; valu
   );
 }
 
-function ChartCard({ title, desc, children }: { title: string; desc: string; children: React.ReactNode }) {
+function ChartSkeleton() {
   return (
-    <div className="p-5 bg-white border border-dawn rounded-2xl hover:shadow-md transition-shadow">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h3 className="relaxed-title text-base font-bold">{title}</h3>
-          <p className="text-[9px] font-bold text-muted uppercase tracking-widest mt-0.5">{desc}</p>
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {[1, 2, 3].map((item) => (
+        <div key={item} className="p-5 bg-white border border-dawn rounded-2xl animate-pulse">
+          <div className="h-4 w-32 bg-dawn rounded mb-3" />
+          <div className="h-3 w-48 bg-dawn/70 rounded mb-5" />
+          <div className="h-[200px] bg-stone rounded-xl" />
         </div>
-      </div>
-      <div className="h-[220px]">{children}</div>
+      ))}
     </div>
   );
 }

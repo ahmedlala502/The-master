@@ -1,28 +1,41 @@
-// ─── API Service — TryGC Hub Manager ────────────────────────────────────────
+// ─── API Service — TryGC Hub Manager v2.0 ────────────────────────────────────
 // Stable multi-provider AI service with:
 //  • Per-provider timeout (10 s)
 //  • Automatic retry (1 retry on network errors, NOT on 4xx)
-//  • Smart context-aware mock fallback — always returns something useful
+//  • Smart context-aware mock fallback
 //  • Custom OpenAI-compatible provider support via workspace settings
+//  • Better error handling and sanitization
 // ─────────────────────────────────────────────────────────────────────────────
 
-const STORE_KEY = 'trygc_flowos_workspace_v4';
-const API_KEYS_STORE = 'trygc_api_keys_v1';
-const TIMEOUT_MS = 20_000;
-const MAX_RETRIES = 2;
+const TIMEOUT_MS = 10_000;
+const MAX_RETRIES = 1;
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 function getSettings(): Record<string, unknown> | null {
   try {
-    const raw = localStorage.getItem(STORE_KEY);
+    const raw = localStorage.getItem('trygc_hub_settings_v2');
     if (!raw) return null;
-    return JSON.parse(raw)?.settings || null;
+    return JSON.parse(raw) || null;
   } catch { return null; }
 }
 
-function getApiKey(provider: string): string {
-  try { return (JSON.parse(localStorage.getItem(API_KEYS_STORE) || '{}') as Record<string, string>)[provider] || ''; } catch { return ''; }
+function redactSecrets(value: string): string {
+  return value
+    .replace(/sk-[a-zA-Z0-9_\-]+/g, '[REDACTED_KEY]')
+    .replace(/AIza[0-9A-Za-z\-_]{20,}/g, '[REDACTED_KEY]')
+    .replace(/Bearer\s+[A-Za-z0-9\-._~+/]+=*/gi, 'Bearer [REDACTED_TOKEN]');
+}
+
+function sanitizePromptInput(input: string): string {
+  const bounded = input.slice(0, 4000);
+  return bounded
+    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
+    .replace(/ignore\s+all\s+previous\s+instructions/gi, '[BLOCKED]')
+    .replace(/reveal\s+(system|hidden)\s+prompt/gi, '[BLOCKED]')
+    .replace(/disregard\s+.+?instructions/gi, '[BLOCKED]')
+    .replace(/bypass\s+.+?security/gi, '[BLOCKED]')
+    .trim();
 }
 
 /** fetch with a hard timeout and automatic retry on network/5xx errors */
@@ -38,7 +51,7 @@ async function fetchWithTimeout(
     clearTimeout(timer);
     // Retry once on 5xx (server errors), never on 4xx (auth / bad-request)
     if (!res.ok && res.status >= 500 && attempt < MAX_RETRIES) {
-      await new Promise(r => setTimeout(r, 800));
+      await new Promise(r => setTimeout(r, 1000));
       return fetchWithTimeout(url, opts, attempt + 1);
     }
     return res;
@@ -46,16 +59,18 @@ async function fetchWithTimeout(
     clearTimeout(timer);
     const isAbort = err instanceof Error && err.name === 'AbortError';
     if (!isAbort && attempt < MAX_RETRIES) {
-      await new Promise(r => setTimeout(r, 800));
+      await new Promise(r => setTimeout(r, 1000));
       return fetchWithTimeout(url, opts, attempt + 1);
     }
-    throw isAbort ? new Error('Request timed out — check your network or endpoint.') : err;
+    throw isAbort
+      ? new Error('Request timed out after 10s. Check your network or endpoint.')
+      : err;
   }
 }
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
-export type AIProviderName = 'gemini' | 'openai' | 'anthropic' | 'groq' | 'alibaba' | 'local' | 'custom' | 'mock';
+export type AIProviderName = 'openai' | 'anthropic' | 'groq' | 'alibaba' | 'local' | 'custom' | 'mock';
 
 export interface AIResult {
   text: string;
@@ -66,27 +81,10 @@ export interface AIResult {
 export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
+  timestamp?: number;
 }
 
 // ── provider calls ────────────────────────────────────────────────────────────
-
-async function callGemini(apiKey: string, model: string, prompt: string): Promise<string> {
-  const m = model || 'gemini-1.5-flash';
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`;
-  const res = await fetchWithTimeout(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error((err as { error?: { message?: string } })?.error?.message || `Gemini ${res.status}`);
-  }
-  const data = await res.json();
-  const text: string = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-  if (!text) throw new Error('Gemini returned an empty response.');
-  return text;
-}
 
 async function callOpenAICompat(
   apiKey: string,
@@ -97,12 +95,23 @@ async function callOpenAICompat(
 ): Promise<string> {
   const res = await fetchWithTimeout(endpoint, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-    body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], max_tokens: 600 }),
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 600,
+      temperature: 0.7,
+    }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error((err as { error?: { message?: string } })?.error?.message || `${providerLabel} ${res.status}`);
+    throw new Error(
+      (err as { error?: { message?: string } })?.error?.message
+      || `${providerLabel} ${res.status}: ${res.statusText}`
+    );
   }
   const data = await res.json();
   const text: string = data?.choices?.[0]?.message?.content || '';
@@ -120,11 +129,18 @@ async function callAnthropic(apiKey: string, model: string, endpoint: string, pr
       'anthropic-version': '2023-06-01',
       'anthropic-dangerous-direct-browser-access': 'true',
     },
-    body: JSON.stringify({ model: model || 'claude-3-5-haiku-20241022', max_tokens: 600, messages: [{ role: 'user', content: prompt }] }),
+    body: JSON.stringify({
+      model: model || 'claude-3-5-haiku-20241022',
+      max_tokens: 600,
+      messages: [{ role: 'user', content: prompt }],
+    }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error((err as { error?: { message?: string } })?.error?.message || `Anthropic ${res.status}`);
+    throw new Error(
+      (err as { error?: { message?: string } })?.error?.message
+      || `Anthropic ${res.status}: ${res.statusText}`
+    );
   }
   const data = await res.json();
   const text: string = data?.content?.[0]?.text || '';
@@ -140,7 +156,7 @@ async function callOllama(model: string, endpoint: string, prompt: string): Prom
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ model: model || 'llama3', prompt, stream: false }),
   });
-  if (!res.ok) throw new Error(`Ollama ${res.status} — is the server running?`);
+  if (!res.ok) throw new Error(`Ollama ${res.status}: ${res.statusText} — is the server running?`);
   const data = await res.json();
   const text: string = data?.response || '';
   if (!text) throw new Error('Ollama returned an empty response.');
@@ -150,6 +166,7 @@ async function callOllama(model: string, endpoint: string, prompt: string): Prom
 // ── main dispatcher ───────────────────────────────────────────────────────────
 
 async function callProvider(prompt: string): Promise<AIResult> {
+  const safePrompt = sanitizePromptInput(prompt);
   const settings = getSettings() as {
     aiProvider?: string;
     aiModel?: string;
@@ -159,57 +176,42 @@ async function callProvider(prompt: string): Promise<AIResult> {
     fallbackProviders?: string[];
   } | null;
 
-  const provider: string = settings?.aiProvider || 'gemini';
-  const providerModels: Record<string, string> = settings?.providerModels || {};
-  const providerEndpoints: Record<string, string> = settings?.providerEndpoints || {};
-  const fallbackProviders: string[] = settings?.fallbackProviders || ['local', 'openai', 'anthropic', 'groq'];
-  const model: string = settings?.aiModel || providerModels[provider] || '';
-  const endpoint: string = settings?.aiEndpoint || providerEndpoints[provider] || '';
+  const provider = settings?.aiProvider || 'openai';
+  const providerModels = settings?.providerModels || {};
+  const fallbackProviders = settings?.fallbackProviders || ['local', 'openai', 'anthropic', 'groq'];
+  const model = settings?.aiModel || providerModels[provider] || '';
   const attemptOrder = [provider, ...fallbackProviders.filter(item => item && item !== provider)];
   let lastError = '';
 
   for (const candidate of attemptOrder) {
     const candidateModel = candidate === provider ? model : providerModels[candidate] || '';
-    const candidateEndpoint = candidate === provider ? endpoint : providerEndpoints[candidate] || '';
-    const candidateKey = getApiKey(candidate);
     const t0 = Date.now();
-
-    if (!candidateKey && candidate !== 'local') {
-      lastError = `No API key configured for ${candidate}.`;
-      continue;
-    }
 
     try {
       let text = '';
-
-      if (candidate === 'gemini') {
-        text = await callGemini(candidateKey, candidateModel, prompt);
-      } else if (candidate === 'openai') {
-        text = await callOpenAICompat(candidateKey, candidateModel || 'gpt-4o', candidateEndpoint || 'https://api.openai.com/v1/chat/completions', prompt, 'OpenAI');
-      } else if (candidate === 'anthropic') {
-        text = await callAnthropic(candidateKey, candidateModel, candidateEndpoint, prompt);
-      } else if (candidate === 'groq') {
-        text = await callOpenAICompat(candidateKey, candidateModel || 'llama-3.3-70b-versatile', candidateEndpoint || 'https://api.groq.com/openai/v1/chat/completions', prompt, 'Groq');
-      } else if (candidate === 'alibaba') {
-        text = await callOpenAICompat(candidateKey, candidateModel || 'qwen-plus', candidateEndpoint || 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', prompt, 'Alibaba');
-      } else if (candidate === 'local') {
-        text = await callOllama(candidateModel, candidateEndpoint, prompt);
-      } else if (candidateEndpoint) {
-        const chatUrl = candidateEndpoint.replace(/\/?$/, '/chat/completions');
-        text = await callOpenAICompat(candidateKey, candidateModel || 'default', chatUrl, prompt, candidate);
+      if (candidate === 'local') {
+        text = await callOllama(candidateModel, '', safePrompt);
       } else {
-        lastError = `Unknown provider "${candidate}".`;
-        continue;
+        const proxyResponse = await fetchWithTimeout('/api/ai/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ provider: candidate, model: candidateModel, prompt: safePrompt }),
+        });
+        const proxyJson = await proxyResponse.json().catch(() => ({}));
+        if (!proxyResponse.ok) {
+          throw new Error(proxyJson?.error || `AI proxy failed (${proxyResponse.status})`);
+        }
+        text = String(proxyJson?.text || '');
       }
 
       return { text, provider: candidate as AIProviderName, latencyMs: Date.now() - t0 };
     } catch (err: unknown) {
-      lastError = err instanceof Error ? err.message : String(err);
+      lastError = err instanceof Error ? redactSecrets(err.message) : redactSecrets(String(err));
       console.warn(`[apiService] ${candidate} failed (${lastError}) — trying next fallback`);
     }
   }
 
-  return mockFallback(prompt, lastError || 'No AI provider could respond.');
+  return mockFallback(safePrompt, lastError || 'No AI provider could respond.');
 }
 
 // ── smart mock fallback ───────────────────────────────────────────────────────
@@ -274,21 +276,34 @@ export async function generateHandoverSummary({ tasks, watchouts }: {
   return callProvider(prompt);
 }
 
-export async function chatWithWorkspaceAI({ history, tasksSummary, handoverSummary }: {
+export async function chatWithWorkspaceAI({ history, tasksSummary, handoverSummary, memberStats }: {
   history: ChatMessage[];
   tasksSummary: string;
   handoverSummary: string;
+  memberStats?: string;
 }): Promise<AIResult> {
   const transcript = history.map(message => `${message.role === 'assistant' ? 'Assistant' : 'User'}: ${message.content}`).join('\n');
   const prompt = [
     'You are the AI operations copilot for TryGC Hub Manager.',
     `Task context: ${tasksSummary}`,
     `Handover context: ${handoverSummary}`,
-    'Give direct, practical, operational answers.',
+    memberStats ? `Team context: ${memberStats}` : '',
+    'Give direct, practical, operational answers. Be concise but thorough.',
     '',
     transcript,
     '',
     'Reply to the latest user message.',
   ].join('\n');
+  return callProvider(prompt);
+}
+
+export async function analyzeRisks(tasks: Array<{ title: string; priority: string; status: string; due?: string }>): Promise<AIResult> {
+  const taskList = tasks.map(t => `- [${t.priority}/${t.status}] ${t.title}${t.due ? ` (due: ${t.due})` : ''}`).join('\n');
+  const prompt = `Analyze these tasks for operational risks:\n${taskList}\n\nIdentify the top 3 risks, their severity (high/medium/low), and specific mitigation actions. Format as a concise operations brief.`;
+  return callProvider(prompt);
+}
+
+export async function suggestTaskBreakdown(title: string, details?: string): Promise<AIResult> {
+  const prompt = `Break down this task into actionable sub-tasks:\nTitle: ${title}${details ? `\nDetails: ${details}` : ''}\n\nProvide 3-5 concrete steps. Return as a bullet list only.`;
   return callProvider(prompt);
 }

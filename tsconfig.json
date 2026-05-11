@@ -11,23 +11,17 @@
     "moduleDetection": "force",
     "allowJs": true,
     "jsx": "react-jsx",
-    "paths": { "@/*": ["./*"] },
+    "paths": { "@/*": ["./src/*"] },
     "allowImportingTsExtensions": true,
     "noEmit": true,
-    "strict": true
+    "strict": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"],
   "exclude": [
-    "src/pages/**",
-    "src/services/**",
-    "src/components/BlockerTab.tsx",
-    "src/components/CoverageTab.tsx",
-    "src/components/InfluencerWorkspace.tsx",
-    "src/components/Layout.tsx",
-    "src/components/views/OfficeMap.tsx",
-    "src/components/ui/**",
-    "src/lib/firebase.ts",
-    "src/lib/seed.ts",
-    "src/utils.ts"
+    "node_modules",
+    "dist",
+    "src/components/ui/**"
   ]
 }

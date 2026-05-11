@@ -73,7 +73,7 @@ export default function AICopilot({ tasks, handovers, messages, setMessages }: A
   const scrollerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
-  const activeProvider = settings.aiProvider || 'gemini';
+  const activeProvider = settings.aiProvider || 'openai';
   const fallbackProviders = settings.fallbackProviders?.length ? settings.fallbackProviders.join(' → ') : 'local → openai → anthropic → groq';
   const openCount = tasks.filter(task => task.status !== 'Done').length;
   const riskCount = tasks.filter(task => task.status !== 'Done' && (task.priority === 'High' || task.status === 'Blocked')).length;

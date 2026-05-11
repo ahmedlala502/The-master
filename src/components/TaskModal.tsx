@@ -359,7 +359,7 @@ export default function TaskModal({ isOpen, onClose, onSave, initialTask }: Task
                 <button
                   type="button"
                   onClick={() => {
-                    const newReminder: Reminder = { time: reminderTime, triggered: false };
+                    const newReminder: Reminder = { id: crypto.randomUUID(), time: reminderTime, triggered: false };
                     setForm({ ...form, reminders: [...(form.reminders || []), newReminder] });
                   }}
                   className="px-4 py-2 bg-amber-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-amber-600 transition-colors shadow-sm"

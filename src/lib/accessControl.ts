@@ -1,21 +1,26 @@
 import { Member, Task, Handover, Office, User } from '../types';
 
-export const APP_PAGES = ['dashboard', 'reports', 'tasks', 'handover', 'offices', 'team', 'ai', 'settings'] as const;
+export const APP_PAGES = ['dashboard', 'reports', 'tasks', 'handover', 'offices', 'team', 'ai', 'settings', 'profile'] as const;
 export type AppPage = (typeof APP_PAGES)[number];
 
 export const FEATURE_KEYS = [
   'task.create',
   'task.edit',
   'task.bulk',
+  'task.delete',
   'handover.create',
   'handover.edit',
   'handover.ack',
+  'handover.delete',
   'ai.use',
   'ai.configure',
   'settings.manage',
   'users.manage',
-  'users.switch',
+  'members.manage',
+  'offices.manage',
   'widgets.manage',
+  'export.data',
+  'import.data',
 ] as const;
 export type FeatureKey = (typeof FEATURE_KEYS)[number];
 
@@ -30,6 +35,8 @@ export const WIDGET_KEYS = [
   'aiQuickPrompts',
   'aiStudio',
   'aiProviderPanel',
+  'memberStats',
+  'officeMap',
 ] as const;
 export type WidgetKey = (typeof WIDGET_KEYS)[number];
 
@@ -37,6 +44,7 @@ export interface RolePermissionProfile {
   pages: AppPage[];
   features: FeatureKey[];
   teams: string[];
+  maxMembers?: number;
 }
 
 export type RolePermissionMap = Record<string, RolePermissionProfile>;
@@ -57,6 +65,8 @@ export const DEFAULT_WIDGET_CONFIG: WidgetConfig = {
   aiQuickPrompts: true,
   aiStudio: true,
   aiProviderPanel: true,
+  memberStats: true,
+  officeMap: true,
 };
 
 export const DEFAULT_ROLE_PERMISSIONS: RolePermissionMap = {
@@ -67,71 +77,81 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissionMap = {
   },
   Admin: {
     pages: ALL_PAGES,
-    features: ALL_FEATURES.filter(feature => feature !== 'users.switch'),
+    features: ALL_FEATURES.filter(f => !f.includes('configure') && f !== 'ai.configure'),
     teams: ['*'],
   },
   'Regional Manager': {
-    pages: ['dashboard', 'reports', 'tasks', 'handover', 'offices', 'team', 'ai', 'settings'],
-    features: ['task.create', 'task.edit', 'task.bulk', 'handover.create', 'handover.edit', 'handover.ack', 'ai.use', 'ai.configure'],
+    pages: ['dashboard', 'reports', 'tasks', 'handover', 'offices', 'team', 'ai', 'settings', 'profile'],
+    features: ['task.create', 'task.edit', 'task.bulk', 'task.delete', 'handover.create', 'handover.edit', 'handover.ack', 'handover.delete', 'ai.use', 'members.manage', 'offices.manage', 'export.data'],
     teams: ['*'],
   },
   'Country Manager': {
-    pages: ['dashboard', 'reports', 'tasks', 'handover', 'offices', 'team', 'ai'],
-    features: ['task.create', 'task.edit', 'task.bulk', 'handover.create', 'handover.edit', 'handover.ack', 'ai.use'],
+    pages: ['dashboard', 'reports', 'tasks', 'handover', 'offices', 'team', 'ai', 'profile'],
+    features: ['task.create', 'task.edit', 'task.bulk', 'handover.create', 'handover.edit', 'handover.ack', 'ai.use', 'export.data'],
     teams: ['*'],
   },
   'Operations Lead': {
-    pages: ['dashboard', 'reports', 'tasks', 'handover', 'team', 'ai'],
-    features: ['task.create', 'task.edit', 'task.bulk', 'handover.create', 'handover.edit', 'handover.ack', 'ai.use'],
+    pages: ['dashboard', 'reports', 'tasks', 'handover', 'team', 'ai', 'profile'],
+    features: ['task.create', 'task.edit', 'task.bulk', 'handover.create', 'handover.edit', 'handover.ack', 'ai.use', 'export.data'],
     teams: ['Operations Team'],
   },
   'Operations Manager': {
-    pages: ['dashboard', 'reports', 'tasks', 'handover', 'team', 'ai'],
+    pages: ['dashboard', 'reports', 'tasks', 'handover', 'team', 'ai', 'profile'],
     features: ['task.create', 'task.edit', 'task.bulk', 'handover.create', 'handover.edit', 'handover.ack', 'ai.use'],
     teams: ['Operations Team'],
   },
   'Shift Lead': {
-    pages: ['dashboard', 'tasks', 'handover', 'team', 'ai'],
+    pages: ['dashboard', 'tasks', 'handover', 'team', 'ai', 'profile'],
     features: ['task.create', 'task.edit', 'task.bulk', 'handover.create', 'handover.edit', 'handover.ack', 'ai.use'],
     teams: ['Operations Team'],
   },
   'Operations Agent': {
-    pages: ['dashboard', 'tasks', 'handover', 'ai'],
+    pages: ['dashboard', 'tasks', 'handover', 'ai', 'profile'],
     features: ['task.create', 'task.edit', 'handover.create', 'handover.ack', 'ai.use'],
     teams: ['Operations Team'],
   },
   'Senior Operations Agent': {
-    pages: ['dashboard', 'tasks', 'handover', 'ai'],
+    pages: ['dashboard', 'tasks', 'handover', 'ai', 'profile'],
     features: ['task.create', 'task.edit', 'handover.create', 'handover.edit', 'handover.ack', 'ai.use'],
     teams: ['Operations Team'],
   },
   'Community Lead': {
-    pages: ['dashboard', 'reports', 'tasks', 'handover', 'team', 'ai'],
-    features: ['task.create', 'task.edit', 'task.bulk', 'handover.create', 'handover.edit', 'handover.ack', 'ai.use'],
+    pages: ['dashboard', 'reports', 'tasks', 'handover', 'team', 'ai', 'profile'],
+    features: ['task.create', 'task.edit', 'task.bulk', 'handover.create', 'handover.edit', 'handover.ack', 'ai.use', 'export.data'],
     teams: ['Community Team'],
   },
   'Community Manager': {
-    pages: ['dashboard', 'reports', 'tasks', 'handover', 'team', 'ai'],
+    pages: ['dashboard', 'reports', 'tasks', 'handover', 'team', 'ai', 'profile'],
     features: ['task.create', 'task.edit', 'task.bulk', 'handover.create', 'handover.edit', 'handover.ack', 'ai.use'],
     teams: ['Community Team'],
   },
   'Creator Coverage Lead': {
-    pages: ['dashboard', 'tasks', 'handover', 'ai'],
+    pages: ['dashboard', 'tasks', 'handover', 'ai', 'profile'],
     features: ['task.create', 'task.edit', 'handover.create', 'handover.edit', 'handover.ack', 'ai.use'],
     teams: ['Community Team'],
   },
   'Community Agent': {
-    pages: ['dashboard', 'tasks', 'handover', 'ai'],
+    pages: ['dashboard', 'tasks', 'handover', 'ai', 'profile'],
     features: ['task.create', 'task.edit', 'handover.create', 'handover.ack', 'ai.use'],
     teams: ['Community Team'],
   },
+  'QA Lead': {
+    pages: ['dashboard', 'reports', 'tasks', 'handover', 'team', 'ai', 'profile'],
+    features: ['task.create', 'task.edit', 'task.bulk', 'handover.create', 'handover.edit', 'handover.ack', 'ai.use', 'export.data'],
+    teams: ['QA Team'],
+  },
+  'QA Agent': {
+    pages: ['dashboard', 'tasks', 'handover', 'ai', 'profile'],
+    features: ['task.create', 'task.edit', 'handover.create', 'handover.ack', 'ai.use'],
+    teams: ['QA Team'],
+  },
   Analyst: {
-    pages: ['dashboard', 'reports', 'team', 'ai'],
-    features: ['ai.use'],
+    pages: ['dashboard', 'reports', 'team', 'ai', 'profile'],
+    features: ['ai.use', 'export.data'],
     teams: ['*'],
   },
   Viewer: {
-    pages: ['dashboard', 'reports', 'team'],
+    pages: ['dashboard', 'reports', 'team', 'profile'],
     features: [],
     teams: ['*'],
   },
@@ -147,13 +167,14 @@ export function resolveRoleName(role?: string): string {
 
   const lower = normalized.toLowerCase();
   if (lower.includes('super admin')) return 'Super Admin';
-  if (lower.includes('community')) return lower.includes('lead') ? 'Community Lead' : lower.includes('manager') ? 'Community Manager' : 'Community Agent';
+  if (lower.includes('community')) return lower.includes('lead') ? 'Community Lead' : lower.includes('manager') ? 'Community Manager' : lower.includes('creator') ? 'Creator Coverage Lead' : 'Community Agent';
   if (lower.includes('operation')) return lower.includes('lead') ? 'Operations Lead' : lower.includes('manager') ? 'Operations Manager' : 'Operations Agent';
   if (lower.includes('shift lead')) return 'Shift Lead';
   if (lower.includes('creator')) return 'Creator Coverage Lead';
   if (lower.includes('analyst') || lower.includes('report')) return 'Analyst';
   if (lower.includes('admin')) return 'Admin';
   if (lower.includes('manager')) return 'Country Manager';
+  if (lower.includes('qa')) return lower.includes('lead') ? 'QA Lead' : 'QA Agent';
   return 'Viewer';
 }
 
@@ -173,7 +194,12 @@ export function getCurrentMember(user: User, members: Member[]): Member | undefi
 export function getCurrentTeam(user: User, members: Member[]): string {
   const member = getCurrentMember(user, members);
   if (member?.team) return member.team;
-  return user.role.toLowerCase().includes('community') ? 'Community Team' : 'Operations Team';
+  if (user.team) return user.team;
+  return user.role.toLowerCase().includes('community') || user.role.toLowerCase().includes('creator')
+    ? 'Community Team'
+    : user.role.toLowerCase().includes('qa')
+      ? 'QA Team'
+      : 'Operations Team';
 }
 
 function canSeeTeam(team: string | undefined, allowedTeams: string[]): boolean {

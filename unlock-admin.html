@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Unlock Admin Account - TryGC Hub Manager</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+        
+        h1 {
+            color: #2d3748;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+        
+        .subtitle {
+            color: #718096;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        
+        .info-box {
+            background: #edf2f7;
+            border-left: 4px solid #4299e1;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+        }
+        
+        .info-box p {
+            color: #2d3748;
+            line-height: 1.6;
+            margin-bottom: 8px;
+        }
+        
+        .info-box p:last-child {
+            margin-bottom: 0;
+        }
+        
+        .status {
+            background: #f7fafc;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .status-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        
+        .status-item:last-child {
+            border-bottom: none;
+        }
+        
+        .status-label {
+            color: #4a5568;
+            font-weight: 600;
+        }
+        
+        .status-value {
+            color: #2d3748;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .status-value.locked {
+            color: #e53e3e;
+            font-weight: bold;
+        }
+        
+        .status-value.unlocked {
+            color: #38a169;
+            font-weight: bold;
+        }
+        
+        button {
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-bottom: 10px;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+        }
+        
+        button:active {
+            transform: translateY(0);
+        }
+        
+        button:disabled {
+            background: #cbd5e0;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .success {
+            background: #c6f6d5;
+            border-left: 4px solid #38a169;
+            padding: 15px;
+            margin-top: 20px;
+            border-radius: 8px;
+            color: #22543d;
+            display: none;
+        }
+        
+        .error {
+            background: #fed7d7;
+            border-left: 4px solid #e53e3e;
+            padding: 15px;
+            margin-top: 20px;
+            border-radius: 8px;
+            color: #742a2a;
+            display: none;
+        }
+        
+        .code {
+            background: #2d3748;
+            color: #68d391;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+        }
+        
+        .warning {
+            background: #fef5e7;
+            border-left: 4px solid #f59e0b;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            color: #78350f;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔓 Unlock Admin Account</h1>
+        <p class="subtitle">TryGC Hub Manager - Emergency Account Recovery</p>
+        
+        <div class="info-box">
+            <p><strong>What this does:</strong></p>
+            <p>This tool will unlock the admin account by resetting failed login attempts and removing the lockout timer.</p>
+        </div>
+        
+        <div class="warning">
+            <p><strong>⚠️ Important:</strong> Make sure you're on the same domain as your TryGC Hub Manager application (usually <span class="code">localhost:5173</span> or <span class="code">localhost:3000</span>). This tool accesses browser localStorage which is domain-specific.</p>
+        </div>
+        
+        <div class="status" id="status">
+            <div class="status-item">
+                <span class="status-label">Admin Email:</span>
+                <span class="status-value" id="adminEmail">Checking...</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Account Status:</span>
+                <span class="status-value" id="accountStatus">Checking...</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Failed Attempts:</span>
+                <span class="status-value" id="failedAttempts">Checking...</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Locked Until:</span>
+                <span class="status-value" id="lockedUntil">Checking...</span>
+            </div>
+        </div>
+        
+        <button id="unlockBtn" onclick="unlockAccount()">🔓 Unlock Admin Account</button>
+        <button onclick="checkStatus()">🔄 Refresh Status</button>
+        
+        <div class="success" id="successMsg"></div>
+        <div class="error" id="errorMsg"></div>
+    </div>
+    
+    <script>
+        const STORAGE_KEY = 'trygc_hub_workspace_v5';
+        const ADMIN_EMAIL = 'admin@trygc.local';
+        
+        function checkStatus() {
+            try {
+                const data = localStorage.getItem(STORAGE_KEY);
+                if (!data) {
+                    showError('No workspace data found. Make sure you\'re on the correct domain.');
+                    return;
+                }
+                
+                const workspace = JSON.parse(data);
+                const adminUser = workspace.users.find(u => u.email.toLowerCase() === ADMIN_EMAIL);
+                
+                if (!adminUser) {
+                    showError('Admin account not found in workspace data.');
+                    return;
+                }
+                
+                // Update status display
+                document.getElementById('adminEmail').textContent = adminUser.email;
+                document.getElementById('accountStatus').textContent = adminUser.status || 'active';
+                
+                const attempts = adminUser.loginAttempts || 0;
+                const attemptsEl = document.getElementById('failedAttempts');
+                attemptsEl.textContent = attempts;
+                attemptsEl.className = 'status-value' + (attempts >= 5 ? ' locked' : '');
+                
+                const lockedUntil = adminUser.lockedUntil;
+                const lockedEl = document.getElementById('lockedUntil');
+                if (lockedUntil) {
+                    const lockDate = new Date(lockedUntil);
+                    const now = new Date();
+                    if (lockDate > now) {
+                        const minutesLeft = Math.ceil((lockDate - now) / 60000);
+                        lockedEl.textContent = `${minutesLeft} minute(s) remaining`;
+                        lockedEl.className = 'status-value locked';
+                    } else {
+                        lockedEl.textContent = 'Expired (but not cleared)';
+                        lockedEl.className = 'status-value';
+                    }
+                } else {
+                    lockedEl.textContent = 'Not locked';
+                    lockedEl.className = 'status-value unlocked';
+                }
+                
+                // Enable/disable unlock button
+                const needsUnlock = attempts > 0 || lockedUntil;
+                document.getElementById('unlockBtn').disabled = !needsUnlock;
+                
+                if (!needsUnlock) {
+                    showSuccess('✅ Admin account is already unlocked and ready to use!');
+                }
+                
+            } catch (error) {
+                showError('Error reading workspace data: ' + error.message);
+            }
+        }
+        
+        function unlockAccount() {
+            try {
+                const data = localStorage.getItem(STORAGE_KEY);
+                if (!data) {
+                    showError('No workspace data found.');
+                    return;
+                }
+                
+                const workspace = JSON.parse(data);
+                const adminIndex = workspace.users.findIndex(u => u.email.toLowerCase() === ADMIN_EMAIL);
+                
+                if (adminIndex === -1) {
+                    showError('Admin account not found.');
+                    return;
+                }
+                
+                // Reset login attempts and remove lockout
+                workspace.users[adminIndex].loginAttempts = 0;
+                delete workspace.users[adminIndex].lockedUntil;
+                
+                // Save back to localStorage
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(workspace));
+                
+                // Add audit log
+                if (!workspace.auditLogs) workspace.auditLogs = [];
+                workspace.auditLogs.unshift({
+                    id: 'audit-' + Date.now(),
+                    action: 'ACCOUNT_UNLOCKED',
+                    details: { email: ADMIN_EMAIL, method: 'emergency_unlock_tool' },
+                    timestamp: new Date().toISOString(),
+                    userId: 'system',
+                    severity: 'warning'
+                });
+                
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(workspace));
+                
+                showSuccess('✅ Admin account unlocked successfully! You can now login with:<br><br><strong>Email:</strong> admin@trygc.local<br><strong>Password:</strong> TryGC@2024!Secure<br><br>Please refresh your TryGC Hub Manager page and try logging in again.');
+                
+                // Refresh status
+                setTimeout(checkStatus, 500);
+                
+            } catch (error) {
+                showError('Error unlocking account: ' + error.message);
+            }
+        }
+        
+        function showSuccess(message) {
+            const el = document.getElementById('successMsg');
+            el.innerHTML = message;
+            el.style.display = 'block';
+            document.getElementById('errorMsg').style.display = 'none';
+        }
+        
+        function showError(message) {
+            const el = document.getElementById('errorMsg');
+            el.textContent = message;
+            el.style.display = 'block';
+            document.getElementById('successMsg').style.display = 'none';
+        }
+        
+        // Check status on load
+        window.addEventListener('load', checkStatus);
+    </script>
+</body>
+</html>

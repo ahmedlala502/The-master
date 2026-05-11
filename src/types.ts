@@ -18,10 +18,57 @@ export enum Shift {
   NIGHT = 'Night',
 }
 
+export enum ThemeMode {
+  FLOW = 'flow',
+  TECH = 'tech',
+  MINIMAL = 'minimal',
+}
+
 export interface Reminder {
+  id: string;
   time: string;
   triggered: boolean;
   label?: string;
+}
+
+export interface PerformanceMetrics {
+  tasksCompleted: number;
+  tasksInProgress: number;
+  tasksBlocked: number;
+  handoversOut: number;
+  handoversAcknowledged: number;
+  onTimeRate: number;
+  qualityScore: number;
+  avgCompletionTime: number;
+  lastActivityDate?: string;
+  thisMonthCompleted?: number;
+  lastMonthCompleted?: number;
+}
+
+export interface UserPreferences {
+  notifications?: boolean;
+  emailDigest?: 'daily' | 'weekly' | 'never';
+  theme?: ThemeMode;
+  timezone?: string;
+  language?: string;
+  remindersEnabled?: boolean;
+  reminderTime?: string;
+  sidebarCollapsed?: boolean;
+  density?: 'compact' | 'comfortable';
+}
+
+export interface UserProfile {
+  id: string;
+  bio?: string;
+  avatar?: string;
+  skills?: string[];
+  specializations?: string[];
+  yearsOfExperience?: number;
+  joinDate: string;
+  lastLoginDate?: string;
+  preferences: UserPreferences;
+  metrics: PerformanceMetrics;
+  notes?: string;
 }
 
 export interface Task {
@@ -43,6 +90,16 @@ export interface Task {
   createdAt: string;
   updatedAt: string;
   creatorId: string;
+  completedAt?: string;
+  completedBy?: string;
+  dependencies?: string[];
+  tags?: string[];
+  estimatedHours?: number;
+  actualHours?: number;
+  blockedReason?: string;
+  blockedSince?: string;
+  syncedAt?: string;
+  localOnly?: boolean;
 }
 
 export interface Handover {
@@ -66,6 +123,11 @@ export interface Handover {
   reviewComment?: string;
   reviewHistory?: HandoverReviewEntry[];
   creatorId: string;
+  templateId?: string;
+  quality?: 'excellent' | 'good' | 'fair' | 'poor';
+  issues?: string[];
+  syncedAt?: string;
+  localOnly?: boolean;
 }
 
 export interface HandoverReviewEntry {
@@ -76,12 +138,31 @@ export interface HandoverReviewEntry {
   action: 'Reviewed' | 'Acknowledged';
 }
 
+export interface HandoverTemplate {
+  id: string;
+  name: string;
+  description?: string;
+  team: string;
+  fromShift: Shift;
+  toShift: Shift;
+  defaultTasks?: string[];
+  defaultWatchouts?: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Office {
   id: string;
   name: string;
   country: string;
   lead: string;
   shift: Shift;
+  teamCapacity?: number;
+  currentLoad?: number;
+  timezone?: string;
+  address?: string;
+  phone?: string;
 }
 
 export interface Member {
@@ -95,6 +176,10 @@ export interface Member {
   handoversOut: number;
   onTime: number;
   updatedAt?: string;
+  profile?: UserProfile;
+  email?: string;
+  avatar?: string;
+  status?: 'active' | 'on-leave' | 'inactive';
 }
 
 export interface User {
@@ -106,14 +191,21 @@ export interface User {
   team?: string;
   password?: string;
   isSuperAdmin?: boolean;
+  avatar?: string;
+  phone?: string;
 }
 
 export interface WorkspaceUser extends User {
   id: string;
   team: string;
-  status: 'active';
+  status: 'active' | 'inactive' | 'suspended';
   createdAt: string;
   approvedAt?: string;
+  profile?: UserProfile;
+  passwordHash?: string;
+  lastLoginAt?: string;
+  loginAttempts?: number;
+  lockedUntil?: string;
 }
 
 export interface PendingSignupRequest {
@@ -125,12 +217,19 @@ export interface PendingSignupRequest {
   office: string;
   country: string;
   requestedAt: string;
+  verificationCode?: string;
+  verifiedAt?: string;
+  approvedBy?: string;
+  approvedAt?: string;
 }
 
 export interface AuthState {
   isAuthenticated: boolean;
   isLocked: boolean;
   lastActivity: number;
+  sessionId?: string;
+  expiresAt?: number;
+  rememberMe?: boolean;
 }
 
 export interface AppState {
@@ -141,4 +240,26 @@ export interface AppState {
   offices: Office[];
   members: Member[];
   teams: string[];
+}
+
+export interface SyncState {
+  isOnline: boolean;
+  isSyncing: boolean;
+  lastSyncedAt?: string;
+  pendingChanges: number;
+  error?: string;
+}
+
+export type AIProviderName = 'openai' | 'anthropic' | 'groq' | 'alibaba' | 'local' | 'custom' | 'mock';
+
+export interface AIResult {
+  text: string;
+  provider: AIProviderName;
+  latencyMs?: number;
+}
+
+export interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp?: number;
 }

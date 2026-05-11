@@ -56,15 +56,14 @@ const settingTabs = [
 const API_KEYS_STORE = 'trygc_api_keys_v1';
 
 function loadApiKeys(): Record<string, string> {
-  try { return JSON.parse(localStorage.getItem(API_KEYS_STORE) || '{}'); } catch { return {}; }
+  try { return JSON.parse(sessionStorage.getItem(API_KEYS_STORE) || '{}'); } catch { return {}; }
 }
 function persistApiKeys(keys: Record<string, string>) {
-  localStorage.setItem(API_KEYS_STORE, JSON.stringify(keys));
+  sessionStorage.setItem(API_KEYS_STORE, JSON.stringify(keys));
 }
 
 const BUILTIN_PROVIDERS = [
-  { id: 'gemini', name: 'Google Gemini', badge: 'G', defaultModel: 'gemini-1.5-flash', keyPlaceholder: 'AIza...', color: 'bg-blue-500', adminOnly: false },
-  { id: 'openai', name: 'OpenAI', badge: '⬡', defaultModel: 'gpt-4o', keyPlaceholder: 'sk-...', color: 'bg-green-500', adminOnly: false },
+    { id: 'openai', name: 'OpenAI', badge: '⬡', defaultModel: 'gpt-4o', keyPlaceholder: 'sk-...', color: 'bg-green-500', adminOnly: false },
   { id: 'anthropic', name: 'Anthropic Claude', badge: '◈', defaultModel: 'claude-3-5-sonnet-20241022', keyPlaceholder: 'sk-ant-...', color: 'bg-orange-500', adminOnly: false },
   { id: 'groq', name: 'Groq', badge: '⚡', defaultModel: 'llama-3.3-70b-versatile', keyPlaceholder: 'gsk_...', color: 'bg-purple-500', adminOnly: false },
   { id: 'alibaba', name: 'Alibaba Qwen', badge: 'Q', defaultModel: 'qwen-plus', keyPlaceholder: 'sk-...', color: 'bg-red-500', adminOnly: true },
@@ -290,14 +289,7 @@ export default function Settings({ activeTab: controlledTab, setActiveTab: setCo
       const key = apiKeys[providerId] || '';
       const model = providerModels[providerId] || '';
       const ep = providerEndpoints[providerId] || '';
-      let ok = false;
-
-      if (providerId === 'gemini' && key) {
-        const m = model || 'gemini-1.5-flash';
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${key}`;
-        const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: 'Hi' }] }] }) });
-        ok = res.ok;
-      } else if (providerId === 'openai' && key) {
+      let ok = false;      if (providerId === 'openai' && key) {
         const url = ep || 'https://api.openai.com/v1/chat/completions';
         const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` }, body: JSON.stringify({ model: model || 'gpt-4o-mini', messages: [{ role: 'user', content: 'Hi' }], max_tokens: 5 }) });
         ok = res.ok;
@@ -496,9 +488,9 @@ export default function Settings({ activeTab: controlledTab, setActiveTab: setCo
                   <Field label="Role"><input className={inputClass} value={profile.role} onChange={e => setProfile({ ...profile, role: e.target.value })} disabled={!isMasterAdmin} /></Field>
                   <Field label="Office"><input className={inputClass} value={profile.office} onChange={e => setProfile({ ...profile, office: e.target.value })} /></Field>
                   <Field label="Country"><input className={inputClass} value={profile.country} onChange={e => setProfile({ ...profile, country: e.target.value })} /></Field>
-                  <Field label="Email"><input className={inputClass} value={profile.email} onChange={e => setProfile({ ...profile, email: e.target.value })} disabled={isMasterAdmin} /></Field>
+                  <Field label="Email"><input className={inputClass} value={profile.email} onChange={e => setProfile({ ...profile, email: e.target.value })} /></Field>
                   <Field label="Passcode">
-                    <input className={inputClass} type="password" value={profile.password || ''} onChange={e => setProfile({ ...profile, password: e.target.value })} placeholder="Set your passcode" disabled={isMasterAdmin} />
+                    <input className={inputClass} type="password" value={profile.password || ''} onChange={e => setProfile({ ...profile, password: e.target.value })} placeholder="Set your passcode" />
                   </Field>
                 </div>
                 <button onClick={saveProfile} className="px-8 py-3 bg-ink text-white rounded-xl text-xs font-black uppercase tracking-widest hover:scale-[1.02] transition-all">Save Profile</button>
@@ -613,7 +605,7 @@ export default function Settings({ activeTab: controlledTab, setActiveTab: setCo
                     <Field label="Active Provider">
                       <select
                         className={inputClass}
-                        value={config.aiProvider || 'gemini'}
+                        value={config.aiProvider || 'openai'}
                         onChange={e => {
                           const next = { ...configRef.current, aiProvider: e.target.value };
                           setConfig(next);
@@ -626,10 +618,10 @@ export default function Settings({ activeTab: controlledTab, setActiveTab: setCo
                     <Field label="Active Model">
                       <input
                         className={inputClass}
-                        value={config.aiModel || providerModels[config.aiProvider || 'gemini'] || ''}
+                        value={config.aiModel || providerModels[config.aiProvider || 'openai'] || ''}
                         onChange={e => setConfig({ ...configRef.current, aiModel: e.target.value })}
                         onBlur={() => saveConfig()}
-                        placeholder={providerModels[config.aiProvider || 'gemini'] || 'model name'}
+                        placeholder={providerModels[config.aiProvider || 'openai'] || 'model name'}
                       />
                     </Field>
                     <Field label="Override Endpoint">
@@ -666,7 +658,7 @@ export default function Settings({ activeTab: controlledTab, setActiveTab: setCo
                       const key = apiKeys[provider.id] || '';
                       const model = providerModels[provider.id] || provider.defaultModel;
                       const result = testResults[provider.id] || 'idle';
-                      const isActive = (config.aiProvider || 'gemini') === provider.id;
+                      const isActive = (config.aiProvider || 'openai') === provider.id;
                       return (
                         <ProviderRow
                           key={provider.id}
@@ -792,7 +784,7 @@ export default function Settings({ activeTab: controlledTab, setActiveTab: setCo
                 <div className="p-6 bg-citrus/5 border border-citrus/20 rounded-3xl">
                   <div className="flex items-center gap-3 text-citrus mb-2"><KeyRound className="w-5 h-5" /><b className="text-xs uppercase tracking-widest">Local-first key storage</b></div>
                   <p className="text-xs font-bold text-muted leading-relaxed">
-                    API keys are stored in <code className="bg-black/5 px-1 rounded font-mono text-[11px]">localStorage</code> under <code className="bg-black/5 px-1 rounded font-mono text-[11px]">trygc_api_keys_v1</code>. They never leave your browser and are saved instantly when you type them.
+                    API keys are stored in <code className="bg-black/5 px-1 rounded font-mono text-[11px]">sessionStorage</code> under <code className="bg-black/5 px-1 rounded font-mono text-[11px]">trygc_api_keys_v1</code>. They are cleared when the browser session ends.
                   </p>
                 </div>
               </div>
@@ -852,7 +844,7 @@ export default function Settings({ activeTab: controlledTab, setActiveTab: setCo
 
           {/* ── User Management ── */}
           {canManageWorkspace && activeTab === 'users' && (
-            <Panel title="User Management" desc="Create team members, assign roles, update profiles, and switch active users.">
+            <Panel title="User Management" desc="Create team members, assign roles, and update profiles.">
               <div className="space-y-6">
 
                 {/* Search + Add + Import/Export */}
@@ -1110,15 +1102,6 @@ export default function Settings({ activeTab: controlledTab, setActiveTab: setCo
                             </div>
 
                             <div className="flex items-center gap-1 shrink-0">
-                              {!isCurrentUser && (
-                                <button
-                                  onClick={() => { updateUser({ name: m.name, role: m.role || user.role, office: m.office, country: m.country, email: user.email }); }}
-                                  title="Switch to this user"
-                                  className="px-2.5 py-1.5 text-[9px] font-black uppercase tracking-widest bg-stone border border-dawn rounded-lg text-muted hover:text-citrus hover:border-citrus/40 transition-all"
-                                >
-                                  Switch
-                                </button>
-                              )}
                               <button
                                 onClick={() => {
                                   if (isEditing) { setEditingMemberId(null); }
