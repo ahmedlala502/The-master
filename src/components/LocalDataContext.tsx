@@ -75,7 +75,8 @@ function toSessionUser(account: WorkspaceUser): User {
     country: account.country,
     email: account.email,
     team: account.team,
-    password: account.password,
+    // SECURITY: Never expose password hash in session user context
+    password: undefined,
     isSuperAdmin: account.isSuperAdmin,
   };
 }
@@ -304,8 +305,12 @@ export function LocalDataProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const canUsePrivilegedFeature = (feature: FeatureKey) => {
-    if (['users.manage', 'settings.manage', 'widgets.manage', 'ai.configure'].includes(feature)) {
+    if (['users.manage', 'widgets.manage', 'ai.configure'].includes(feature)) {
       return isMasterAdmin;
+    }
+    // Super Admins can access settings and all standard features
+    if (feature === 'settings.manage') {
+      return isSuperAdmin;
     }
     return isSuperAdmin || permissionProfile.features.includes(feature);
   };
@@ -420,7 +425,7 @@ export function LocalDataProvider({ children }: { children: React.ReactNode }) {
       scopedHandovers,
       scopedMembers,
       scopedOffices,
-      canAccessPage: page => page === 'settings' ? canUsePrivilegedFeature('settings.manage') : (isSuperAdmin || permissionProfile.pages.includes(page)),
+      canAccessPage: page => page === 'settings' ? isSuperAdmin : (isSuperAdmin || permissionProfile.pages.includes(page)),
       canUseFeature: feature => canUsePrivilegedFeature(feature),
       isWidgetEnabled: widget => workspace.settings.widgetConfig?.[widget] !== false,
       addTask: async task => {

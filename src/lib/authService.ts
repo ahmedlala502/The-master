@@ -160,41 +160,9 @@ export function calculateSessionExpiration(hours: number = 24): number {
   return Date.now() + hours * 60 * 60 * 1000;
 }
 
-export function safeComparePassword(input: string, stored: string): boolean {
-  if (!stored) return false;
-
-  // Constant-time comparison to prevent timing attacks
-  const inputLen = input.length;
-  const storedLen = stored.length;
-  const maxLen = Math.max(inputLen, storedLen);
-  let result = 0;
-
-  for (let i = 0; i < maxLen; i++) {
-    const a = i < inputLen ? input.charCodeAt(i) : 0;
-    const b = i < storedLen ? stored.charCodeAt(i) : 0;
-    result |= a ^ b;
-  }
-
-  // If lengths differ, it's definitely not equal
-  if (inputLen !== storedLen) result |= 1;
-
-  // Also verify with proper bcrypt if possible
-  const bcryptResult = verifyPassword(input, stored);
-
-  return result === 0 && bcryptResult;
-}
-
 export function sanitizeInput(input: string, maxLength: number = 1000): string {
   return input
     .slice(0, maxLength)
     .replace(/[<>]/g, '')
     .trim();
-}
-
-export function validatePasscode(input: string, minLength: number = 6): ValidationResult {
-  const errors: string[] = [];
-  if (!input || input.length < minLength) {
-    errors.push(`Passcode must be at least ${minLength} characters`);
-  }
-  return { valid: errors.length === 0, errors };
 }

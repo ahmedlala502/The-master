@@ -76,10 +76,20 @@ export default function LoginEnhanced({ onLogin, isLocked }: LoginProps) {
     try {
       const result = await onLogin(signinForm.email, signinForm.password);
       if (!result.ok) {
-        setError(result.error || 'Sign in failed.');
+        // Provide specific guidance based on the error
+        const errMsg = result.error || '';
+        if (errMsg.includes('pending')) {
+          setError('Your account is pending approval. An admin will review your request shortly.');
+        } else if (errMsg.includes('password') || errMsg.includes('Invalid')) {
+          setError('Incorrect email or password. Double-check your credentials and try again.');
+        } else if (errMsg.includes('not found') || errMsg.includes('No account')) {
+          setError('No account found with this email. Switch to "Request Access" to create one.');
+        } else {
+          setError(errMsg || 'Sign in failed. Please check your credentials.');
+        }
       }
     } catch {
-      setError('Sign in failed. Please try again.');
+      setError('Connection error. Please check your network and try again.');
     } finally {
       setLoading(false);
     }
@@ -114,7 +124,7 @@ export default function LoginEnhanced({ onLogin, isLocked }: LoginProps) {
         setTimeout(() => setTab('signin'), 4000);
       }
     } catch {
-      setError('Request access failed. Please try again.');
+      setError('Connection error. Please check your network and try again.');
     } finally {
       setLoading(false);
     }
