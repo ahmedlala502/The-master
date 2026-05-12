@@ -31,8 +31,8 @@ const emptyDraft = (owners: string[], defaultTeam: string): Partial<Handover> =>
   toShift: 'Mid',
   team: defaultTeam,
   region: 'Regional',
-  outgoingLead: owners[0] || 'Sarah A.',
-  incomingLead: owners[1] || owners[0] || 'Ahmed E.',
+  outgoingLead: owners[0] || '',
+  incomingLead: owners[1] || owners[0] || '',
   notes: '',
   taskIds: [],
   status: 'Pending',
@@ -48,13 +48,41 @@ export default function HandoverCenter() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
+  const [adminUsers, setAdminUsers] = useState<string[]>([]);
+
+  useEffect(() => {
+    let mounted = true;
+    import('../services/adminApi').then(({ adminApi }) => {
+      adminApi.listUsers().then(users => {
+        if (mounted) {
+          setAdminUsers(users.filter(u => u.status === 'active').map(u => u.displayName));
+        }
+      }).catch(console.error);
+    });
+    return () => { mounted = false; };
+  }, []);
+
   const owners = useMemo(() => {
-    return filterOwnerOptionsByRole(role, Array.from(new Set(tasks.map((task) => task.ownerId.trim()).filter(Boolean))));
-  }, [role, tasks]);
+    const fromTasks = tasks.map((task) => task.ownerId.trim()).filter(Boolean);
+    const combined = Array.from(new Set([...adminUsers, ...fromTasks]));
+    return filterOwnerOptionsByRole(role, combined);
+  }, [role, tasks, adminUsers]);
+
   const teamOptions = useMemo(() => filterTeamOptionsByRole(role, TEAM_OPTIONS), [role]);
   const defaultTeam = teamOptions[0] || (scope === 'community' ? 'Community' : 'Operations');
 
   const [draft, setDraft] = useState<Partial<Handover>>(() => emptyDraft(owners, defaultTeam));
+
+  useEffect(() => {
+    if (!editingId && (!draft.outgoingLead || !draft.incomingLead) && owners.length > 0) {
+      setDraft(prev => ({
+        ...prev,
+        outgoingLead: prev.outgoingLead || owners[0] || '',
+        incomingLead: prev.incomingLead || owners[1] || owners[0] || '',
+      }));
+    }
+  }, [owners, editingId, draft.outgoingLead, draft.incomingLead]);
+
   const activeTasks = useMemo(() => tasks.filter((task) => !task.completed), [tasks]);
 
   const linkedTasks = useMemo(() => {
@@ -69,9 +97,9 @@ export default function HandoverCenter() {
     if (draft.team?.trim()) score += 10;
     if (draft.region?.trim()) score += 10;
     if (draft.notes?.trim()) score += 20;
-    if ((draft.taskIds || []).length > 0) score += 20;
+    if (linkedTasks.length > 0) score += 20;
     return score;
-  }, [draft]);
+  }, [draft, linkedTasks.length]);
 
   const filteredHandovers = useMemo(() => {
     return handovers.filter((handover) => {
@@ -147,7 +175,10 @@ export default function HandoverCenter() {
 
   const pendingCount = handovers.filter((handover) => handover.status === 'Pending').length;
   const acknowledgedCount = handovers.filter((handover) => handover.status === 'Acknowledged').length;
-  const transferredTaskCount = handovers.reduce((total, handover) => total + handover.taskIds.length, 0);
+  const transferredTaskCount = handovers.reduce((total, handover) => {
+    const validTaskCount = tasks.filter(t => handover.taskIds.includes(t.id)).length;
+    return total + validTaskCount;
+  }, 0);
 
   return (
     <div className="max-w-[1280px] mx-auto space-y-6 pb-12 animate-in fade-in duration-500">
@@ -263,7 +294,7 @@ export default function HandoverCenter() {
               <div className="space-y-3">
                 <ReadinessItem ok={Boolean(draft.outgoingLead?.trim())} label="Outgoing lead selected" />
                 <ReadinessItem ok={Boolean(draft.incomingLead?.trim())} label="Incoming lead selected" />
-                <ReadinessItem ok={Boolean((draft.taskIds || []).length)} label="Relay contains task context" />
+                <ReadinessItem ok={linkedTasks.length > 0} label="Relay contains task context" />
                 <ReadinessItem ok={Boolean(draft.notes?.trim())} label="Shift notes captured" />
               </div>
             </div>
