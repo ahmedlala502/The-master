@@ -423,7 +423,11 @@ export function LocalDataProvider({ children }: { children: React.ReactNode }) {
       scopedHandovers,
       scopedMembers,
       scopedOffices,
-      canAccessPage: page => page === 'settings' ? isSuperAdmin : (isSuperAdmin || permissionProfile.pages.includes(page)),
+      canAccessPage: page => {
+        if (page === 'activity') return isMasterAdmin;
+        if (page === 'settings') return isSuperAdmin;
+        return isSuperAdmin || permissionProfile.pages.includes(page);
+      },
       canUseFeature: feature => canUsePrivilegedFeature(feature),
       isWidgetEnabled: widget => workspace.settings.widgetConfig?.[widget] !== false,
       addTask: async task => {

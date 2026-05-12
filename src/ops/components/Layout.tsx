@@ -4,13 +4,14 @@ import { useAuth } from '../App';
 import {
   LayoutDashboard, LogOut, Bell,
   Settings, ShieldCheck, AlertTriangle, History,
-  Shield, BarChart3, MessageSquare, FileText, CheckSquare,
+  Shield, BarChart3, MessageSquare, CheckSquare,
   Sun, Moon, RefreshCw, Download,
-  FileCheck, Archive, ChevronRight,
+  ChevronRight,
   Search, X, SlidersHorizontal, Check, Clock, CircleAlert, CheckCircle2
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { notificationService, AppNotification } from '../services/notificationService';
+import { exportAllData, downloadJson } from '../services/dataService';
 import { canAccessPath, getRoleLabel } from '../lib/access';
 import { getWorkspaceLabel } from '../lib/workspace';
 
@@ -22,21 +23,18 @@ type NavItem = {
 
 // ── Nav items ─────────────────────────────────────────────
 const OPS_NAV: NavItem[] = [
-  { icon: LayoutDashboard, label: 'Dashboard',        path: '/' },
-  { icon: RefreshCw,       label: 'Handover',          path: '/handover' },
-  { icon: CheckSquare,     label: 'Tasks',             path: '/tasks' },
-  { icon: AlertTriangle,   label: 'Blockers',          path: '/blockers' },
-  { icon: FileCheck,       label: 'Analytics',         path: '/analytics' },
+  { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
+  { icon: RefreshCw,       label: 'Handover',  path: '/handover' },
+  { icon: CheckSquare,     label: 'Tasks',     path: '/tasks' },
+  { icon: AlertTriangle,   label: 'Blockers',  path: '/blockers' },
+  { icon: BarChart3,       label: 'Reporting', path: '/reporting' },
 ];
 
 const SYSTEM_NAV: NavItem[] = [
-  { icon: BarChart3,    label: 'Analytics',   path: '/analytics' },
-  { icon: Archive,      label: 'Asset Index', path: '/assets' },
-  { icon: FileText,     label: 'Reporting',   path: '/reporting' },
-  { icon: MessageSquare,label: 'Templates',   path: '/templates' },
-  { icon: History,      label: 'Audit Logs',  path: '/audit' },
-  { icon: Settings,     label: 'Settings',    path: '/settings' },
-  { icon: Shield,       label: 'Admin',       path: '/admin' },
+  { icon: MessageSquare, label: 'Templates',  path: '/templates' },
+  { icon: History,       label: 'Audit Logs', path: '/audit' },
+  { icon: Settings,      label: 'Settings',   path: '/settings' },
+  { icon: Shield,        label: 'Admin',      path: '/admin' },
 ];
 
 // ── Page label lookup ─────────────────────────────────────
@@ -285,7 +283,11 @@ export default function Layout() {
               <span className="hidden lg:inline">Refresh</span>
             </button>
 
-            <button className="flex items-center gap-1.5 px-2.5 py-1.5 bg-gc-orange text-white rounded-lg text-[11px] font-semibold hover:bg-gc-orange/90 transition-all">
+            <button
+              onClick={() => downloadJson(exportAllData(), `trygc-export-${new Date().toISOString().slice(0, 10)}.json`)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-gc-orange text-white rounded-lg text-[11px] font-semibold hover:bg-gc-orange/90 transition-all"
+              title="Export all workspace data as JSON"
+            >
               <Download className="h-3 w-3" />
               <span className="hidden sm:inline">Export</span>
             </button>
@@ -349,10 +351,6 @@ export default function Layout() {
               )}
             </div>
 
-            {/* AR/EN */}
-            <button className="px-2 py-1.5 border border-border rounded-lg font-condensed font-bold text-[10px] tracking-[0.5px] text-muted-foreground hover:text-foreground hover:border-gc-orange/50 transition-all">
-              AR / EN
-            </button>
           </div>
         </header>
 

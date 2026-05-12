@@ -440,3 +440,56 @@ export const dataService = {
     return [...INFLUENCERS_DATA];
   },
 };
+
+export function exportAllData() {
+  return {
+    campaigns: [...CAMPAIGNS_DATA],
+    influencers: [...INFLUENCERS_DATA],
+    blockers: [...BLOCKERS_DATA],
+    tasks: [...TASKS_DATA],
+    handovers: [...HANDOVERS_DATA],
+    exportedAt: Date.now(),
+    version: '1.0',
+  };
+}
+
+export function importAllData(data: {
+  campaigns?: Campaign[];
+  influencers?: CampaignInfluencer[];
+  blockers?: Blocker[];
+  tasks?: Task[];
+  handovers?: Handover[];
+}) {
+  if (Array.isArray(data.campaigns)) {
+    CAMPAIGNS_DATA = data.campaigns;
+    saveToStorage('GC_CAMPAIGNS', CAMPAIGNS_DATA);
+  }
+  if (Array.isArray(data.influencers)) {
+    INFLUENCERS_DATA = data.influencers;
+    saveToStorage('GC_INFLUENCERS', INFLUENCERS_DATA);
+  }
+  if (Array.isArray(data.blockers)) {
+    BLOCKERS_DATA = data.blockers;
+    saveToStorage('GC_BLOCKERS', BLOCKERS_DATA);
+  }
+  if (Array.isArray(data.tasks)) {
+    TASKS_DATA = data.tasks;
+    saveToStorage('GC_TASKS', TASKS_DATA);
+  }
+  if (Array.isArray(data.handovers)) {
+    HANDOVERS_DATA = data.handovers;
+    saveToStorage('GC_HANDOVERS', HANDOVERS_DATA);
+  }
+}
+
+export function downloadJson(data: object, filename: string) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}

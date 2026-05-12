@@ -60,12 +60,17 @@ export interface LocalWorkspace {
 
 // Separate localStorage keys to prevent data collision
 const STORE_KEYS = {
-  workspace: 'trygc_hub_workspace_v5',
+  workspace: 'trygc_hub_workspace_v6',   // bumped: clears stale v5 demo data
   auth: 'trygc_hub_auth_v2',
   settings: 'trygc_hub_settings_v2',
   draft: 'trygc_hub_drafts_v1',
   cache: 'trygc_hub_cache_v1',
 };
+
+const DEMO_TASK_IDS = new Set(['t1', 't2', 't3']);
+const DEMO_HANDOVER_IDS = new Set(['h1']);
+const DEMO_MEMBER_IDS = new Set(['m1', 'm2', 'm3', 'm4']);
+const DEMO_OFFICE_IDS = new Set(['1', '2', '3', '4']);
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingSaves = 0;
@@ -366,6 +371,9 @@ export function createWorkspace(): LocalWorkspace {
 
 export function loadWorkspace(): LocalWorkspace {
   try {
+    // Silently clear stale v5 key if still present
+    localStorage.removeItem('trygc_hub_workspace_v5');
+
     const raw = localStorage.getItem(STORE_KEYS.workspace);
     if (!raw) return createWorkspace();
 
@@ -374,14 +382,21 @@ export function loadWorkspace(): LocalWorkspace {
     const members = parsed.members?.length ? parsed.members : seed.members;
     const users = migrateWorkspaceUsers(parsed.users, members);
 
+    // Strip any lingering demo seed data
+    const cleanTasks = migrateTasks(parsed.tasks).filter(t => !DEMO_TASK_IDS.has(t.id));
+    const cleanHandovers = migrateHandovers(parsed.handovers).filter(h => !DEMO_HANDOVER_IDS.has(h.id));
+    const cleanMembers = members.filter(m => !DEMO_MEMBER_IDS.has(m.id));
+    const rawOffices = parsed.offices?.length ? parsed.offices : seed.offices;
+    const cleanOffices = rawOffices.filter(o => !DEMO_OFFICE_IDS.has(o.id));
+
     return {
       user: migrateMasterUser(parsed.user || seed.user, users),
       users,
       pendingSignups: migratePendingSignups(parsed.pendingSignups),
-      tasks: migrateTasks(parsed.tasks),
-      handovers: migrateHandovers(parsed.handovers),
-      offices: parsed.offices?.length ? parsed.offices : seed.offices,
-      members,
+      tasks: cleanTasks,
+      handovers: cleanHandovers,
+      offices: cleanOffices,
+      members: cleanMembers,
       settings: migrateSettings({ ...seed.settings, ...(parsed.settings || {}) }),
       auditLogs: (parsed.auditLogs || []).slice(0, 200),
     };

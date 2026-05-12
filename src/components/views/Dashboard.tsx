@@ -1,6 +1,6 @@
 import React from 'react';
 import { Office, Task, Handover, Priority, Status } from '../../types';
-import { AlertCircle, ArrowRight, Zap, TrendingUp, Clock, Layout, CheckSquare, Globe, RefreshCw, ChevronRight, User, MapPin, CheckCircle } from 'lucide-react';
+import { AlertCircle, ArrowRight, Zap, TrendingUp, Clock, Layout, CheckSquare, Globe, RefreshCw, ChevronRight, User, MapPin, CheckCircle, Upload } from 'lucide-react';
 import { motion } from 'motion/react';
 import { COUNTRY_FLAGS } from '../../constants';
 import { useLocalData } from '../LocalDataContext';
@@ -21,7 +21,9 @@ interface DashboardProps {
 }
 
 export default function Dashboard({ tasks, handovers, offices, stats, onActionRisks, onGenerateBrief, onNavigate }: DashboardProps) {
-  const { isWidgetEnabled } = useLocalData();
+  const { isWidgetEnabled, isMasterAdmin, importData, logAction } = useLocalData();
+  const fileRef = React.useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = React.useState(false);
   const highRiskTasks = [...tasks]
     .filter(t => t.status !== Status.DONE && (t.priority === Priority.HIGH || t.status === Status.BLOCKED))
     .sort((a, b) => new Date(a.due).getTime() - new Date(b.due).getTime())
@@ -44,13 +46,47 @@ export default function Dashboard({ tasks, handovers, offices, stats, onActionRi
               There are <span className="text-white font-bold">{stats.openCount} open outcomes</span> across 7 active territories. 
               Review the <span className="text-citrus font-bold">{stats.riskCount} high-sensitivity alerts</span> before handover initiation.
             </p>
-            <div className="flex gap-4">
+            <div className="flex flex-wrap gap-4 mt-6">
               <button onClick={onActionRisks} className="px-8 py-3 bg-citrus text-ink rounded-xl font-black text-xs uppercase tracking-widest hover:scale-[1.05] transition-all shadow-xl shadow-citrus/20">
                 Action Risks
               </button>
               <button onClick={onGenerateBrief} className="px-8 py-3 bg-white/10 hover:bg-white/20 border border-white/10 text-white rounded-xl font-black text-xs uppercase tracking-widest transition-all">
                 Generate Brief
               </button>
+              {isMasterAdmin && (
+                <>
+                  <input 
+                    type="file" 
+                    accept=".json" 
+                    className="hidden" 
+                    ref={fileRef}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      setImporting(true);
+                      const reader = new FileReader();
+                      reader.onload = (ev) => {
+                        const text = ev.target?.result as string;
+                        if (importData(text)) {
+                          logAction('IMPORT_WORKSPACE_JSON', { source: 'dashboard' });
+                          setTimeout(() => window.location.reload(), 500); // hard reload to reflect new data
+                        }
+                        setImporting(false);
+                      };
+                      reader.readAsText(file);
+                      e.target.value = '';
+                    }}
+                  />
+                  <button 
+                    disabled={importing}
+                    onClick={() => fileRef.current?.click()} 
+                    className="px-8 py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-xl font-black text-xs uppercase tracking-widest transition-all shadow-lg shadow-blue-500/20 flex items-center gap-2 disabled:opacity-50"
+                  >
+                    <Upload className="w-4 h-4" />
+                    {importing ? 'Uploading...' : 'Bulk Upload'}
+                  </button>
+                </>
+              )}
             </div>
           </div>
           

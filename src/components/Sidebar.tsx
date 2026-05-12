@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, CheckSquare, RefreshCw, Globe, MessageSquare, Settings, LogOut, TrendingUp, User as UserIcon, Users, Lock, ChevronLeft, ChevronRight, Bell, Shield } from 'lucide-react';
+import { Home, CheckSquare, RefreshCw, Globe, MessageSquare, Settings, LogOut, TrendingUp, User as UserIcon, Users, Lock, ChevronLeft, ChevronRight, Bell, Shield, Activity } from 'lucide-react';
 import { useLocalData } from './LocalDataContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn, getInitials, generateAvatarColor } from '../utils';
@@ -35,6 +35,7 @@ export default function Sidebar({ activeTab, setActiveTab, openSettingsTab, stat
     { section: 'System' },
     { id: 'profile', label: 'User Manager', icon: UserIcon },
     { id: 'settings', label: 'Settings & Config', icon: Settings },
+    ...(isMasterAdmin ? [{ id: 'activity', label: 'Activity Feed', icon: Activity, badge: null, badgeColor: '' }] : []),
   ];
 
   return (

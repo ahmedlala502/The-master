@@ -31,109 +31,17 @@ export const INITIAL_USER: User = {
   isSuperAdmin: true,
 };
 
-export const TEAMS = [
-  'Operations Team',
-  'Community Team',
-  'QA Team',
-  'Creative Team',
-];
+export const TEAMS: string[] = [];
 
-export const OFFICES: Office[] = [
-  { id: '1', name: 'Riyadh Office', country: 'KSA', lead: 'Mona KSA', shift: Shift.MORNING, timezone: 'Asia/Riyadh' },
-  { id: '2', name: 'Dubai Office', country: 'UAE', lead: 'Nour UAE', shift: Shift.MORNING, timezone: 'Asia/Dubai' },
-  { id: '3', name: 'Kuwait Office', country: 'KW', lead: 'Fahad KW', shift: Shift.NIGHT, timezone: 'Asia/Kuwait' },
-  { id: '4', name: 'Cairo HQ', country: 'EG', lead: 'Ahmed Essmat', shift: Shift.MID, timezone: 'Africa/Cairo' },
-];
+export const OFFICES: Office[] = [];
 
-export const INITIAL_MEMBERS: Member[] = [
-  { id: 'm1', name: 'Ahmed Essmat', team: 'Operations Team', office: 'Cairo HQ', country: 'EG', role: 'Super Admin', tasksCompleted: 18, handoversOut: 7, onTime: 16, status: 'active', avatar: undefined },
-  { id: 'm2', name: 'Mona KSA', team: 'Community Team', office: 'Riyadh Office', country: 'KSA', role: 'Community Lead', tasksCompleted: 14, handoversOut: 4, onTime: 12, status: 'active', avatar: undefined },
-  { id: 'm3', name: 'Nour UAE', team: 'Operations Team', office: 'Dubai Office', country: 'UAE', role: 'Shift Lead', tasksCompleted: 11, handoversOut: 3, onTime: 10, status: 'active', avatar: undefined },
-  { id: 'm4', name: 'Fahad KW', team: 'Community Team', office: 'Kuwait Office', country: 'KW', role: 'Creator Coverage Lead', tasksCompleted: 9, handoversOut: 5, onTime: 7, status: 'active', avatar: undefined },
-];
+export const INITIAL_MEMBERS: Member[] = [];
 
-export const INITIAL_TASKS: Task[] = [
-  {
-    id: 't1',
-    title: 'Audit Tashas missing coverage links',
-    country: 'KSA',
-    office: 'Riyadh Office',
-    team: 'Community Team',
-    owner: 'Mona KSA',
-    shift: Shift.MORNING,
-    priority: Priority.HIGH,
-    status: Status.BLOCKED,
-    due: new Date(Date.now() + 2 * 86400000).toISOString(),
-    details: 'Waiting for influencer proof links from agents. Client is chasing daily.',
-    carry: true,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    creatorId: 'system',
-    tags: ['urgent', 'client-facing'],
-    estimatedHours: 4,
-    blockedReason: 'Missing influencer proof links',
-    blockedSince: new Date().toISOString(),
-  },
-  {
-    id: 't2',
-    title: 'Daily client snapshot UAE Restaurants',
-    country: 'UAE',
-    office: 'Dubai Office',
-    team: 'Operations Team',
-    owner: 'Nour UAE',
-    shift: Shift.MORNING,
-    priority: Priority.MEDIUM,
-    status: Status.IN_PROGRESS,
-    due: new Date(Date.now() + 86400000).toISOString(),
-    details: 'Prepare daily coverage snapshot for UAE restaurant clients including engagement metrics and posting status.',
-    carry: false,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    creatorId: 'system',
-    tags: ['daily', 'reporting'],
-    estimatedHours: 2,
-  },
-  {
-    id: 't3',
-    title: 'Weekly QA review for Kuwait campaign',
-    country: 'KW',
-    office: 'Kuwait Office',
-    team: 'QA Team',
-    owner: 'Fahad KW',
-    shift: Shift.NIGHT,
-    priority: Priority.LOW,
-    status: Status.BACKLOG,
-    due: new Date(Date.now() + 5 * 86400000).toISOString(),
-    details: 'Review all deliverables for the Kuwait campaign before Friday deadline.',
-    carry: false,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    creatorId: 'system',
-    tags: ['weekly', 'qa'],
-    estimatedHours: 6,
-  },
-];
+export const INITIAL_TASKS: Task[] = [];
 
-export const INITIAL_HANDOVERS: Handover[] = [
-  {
-    id: 'h1',
-    date: new Date().toISOString().split('T')[0],
-    fromShift: Shift.MORNING,
-    toShift: Shift.MID,
-    fromOffice: 'Riyadh Office',
-    toOffice: 'Cairo HQ',
-    team: 'Operations Team',
-    country: 'KSA',
-    outgoing: 'Mona KSA',
-    incoming: 'Ahmed Essmat',
-    status: 'Pending',
-    watchouts: 'Please prioritize the Tashas audit as the client is chasing. Ensure all coverage links are verified before EOD.',
-    taskIds: ['t1'],
-    createdAt: new Date().toISOString(),
-    creatorId: 'system',
-    quality: 'good',
-  },
-];
+
+export const INITIAL_HANDOVERS: Handover[] = [];
+
 
 export const HANDOVER_TEMPLATES: HandoverTemplate[] = [
   {

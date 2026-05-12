@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity,
   AlertTriangle,
@@ -26,7 +26,7 @@ import {
   Upload,
   Users,
 } from 'lucide-react';
-import { dataService } from '../services/dataService';
+import { dataService, exportAllData, importAllData, downloadJson } from '../services/dataService';
 import { useAuth } from '../App';
 import type { OpsRole } from '../auth/types';
 import { adminApi } from '../services/adminApi';
@@ -186,6 +186,8 @@ export default function Admin() {
   const [savedAt, setSavedAt] = useState('Ready');
   const [hydrated, setHydrated] = useState(false);
   const [usersLoading, setUsersLoading] = useState(true);
+  const importRef = useRef<HTMLInputElement>(null);
+  const restoreRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -362,6 +364,59 @@ export default function Admin() {
     setPolicies(defaultPolicies);
     setFlags(defaultFlags);
     setSavedAt('Defaults restored');
+  };
+
+  const handleExport = () => {
+    const data = exportAllData();
+    downloadJson(data, `trygc-export-${new Date().toISOString().slice(0, 10)}.json`);
+    setSavedAt('Export downloaded');
+  };
+
+  const handleBackup = () => {
+    const data = exportAllData();
+    downloadJson(data, `trygc-backup-${Date.now()}.json`);
+    setSavedAt('Backup file created');
+  };
+
+  const handleImportFile = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target?.result as string);
+        importAllData(data);
+        refreshDataCounts();
+        setSavedAt('Import successful — reload to refresh views');
+      } catch {
+        setSavedAt('Import failed: invalid JSON file');
+      }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+  };
+
+  const handleRestoreFile = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const confirmed = window.confirm(`Restore from "${file.name}"? All current workspace data will be replaced.`);
+    if (!confirmed) {
+      event.target.value = '';
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target?.result as string);
+        importAllData(data);
+        refreshDataCounts();
+        setSavedAt('Restore complete — reload to refresh views');
+      } catch {
+        setSavedAt('Restore failed: invalid backup file');
+      }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
   };
 
   return (
@@ -607,11 +662,13 @@ export default function Admin() {
               <h3 className="font-condensed font-extrabold text-[17px] text-foreground">Backups, Imports & Exports</h3>
             </div>
             <div className="grid grid-cols-2 gap-2">
-              <ActionButton icon={<Download size={14} />} label="Export Data" />
-              <ActionButton icon={<Upload size={14} />} label="Import Data" />
-              <ActionButton icon={<Archive size={14} />} label="Create Backup" />
-              <ActionButton icon={<RotateCcw size={14} />} label="Restore Point" />
+              <ActionButton icon={<Download size={14} />} label="Export Data" onClick={handleExport} />
+              <ActionButton icon={<Upload size={14} />} label="Import Data" onClick={() => importRef.current?.click()} />
+              <ActionButton icon={<Archive size={14} />} label="Create Backup" onClick={handleBackup} />
+              <ActionButton icon={<RotateCcw size={14} />} label="Restore Point" onClick={() => restoreRef.current?.click()} />
             </div>
+            <input ref={importRef} type="file" accept=".json" className="hidden" onChange={handleImportFile} />
+            <input ref={restoreRef} type="file" accept=".json" className="hidden" onChange={handleRestoreFile} />
             <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 flex items-start gap-3">
               <CheckCircle2 size={16} className="text-emerald-600 mt-0.5" />
               <div>
@@ -740,9 +797,12 @@ function Select({ value, options, onChange }: { value: string; options: string[]
   );
 }
 
-function ActionButton({ icon, label }: { icon: React.ReactNode; label: string }) {
+function ActionButton({ icon, label, onClick }: { icon: React.ReactNode; label: string; onClick?: () => void }) {
   return (
-    <button className="h-10 rounded-lg border border-border bg-secondary text-[10px] font-extrabold uppercase tracking-widest text-foreground hover:border-gc-orange hover:text-gc-orange transition-colors flex items-center justify-center gap-2">
+    <button
+      onClick={onClick}
+      className="h-10 rounded-lg border border-border bg-secondary text-[10px] font-extrabold uppercase tracking-widest text-foreground hover:border-gc-orange hover:text-gc-orange transition-colors flex items-center justify-center gap-2"
+    >
       {icon}
       {label}
     </button>

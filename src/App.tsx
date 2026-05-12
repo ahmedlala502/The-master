@@ -14,6 +14,7 @@ import Sidebar from './components/Sidebar';
 import SessionGuard from './components/SessionGuard';
 import TaskModal from './components/TaskModal';
 import ToastContainer from './components/ToastContainer';
+import MasterExportBar from './components/MasterExportBar';
 
 // Lazy load all views for code splitting
 const Dashboard = lazy(() => import('./components/views/Dashboard'));
@@ -25,6 +26,7 @@ const SettingsView = lazy(() => import('./components/views/Settings'));
 const Reporting = lazy(() => import('./components/views/Reporting'));
 const TeamPerformance = lazy(() => import('./components/views/TeamPerformance'));
 const UserProfilePage = lazy(() => import('./components/views/UserManager'));
+const ActivityFeed = lazy(() => import('./components/views/ActivityFeed'));
 
 const LoadingView = () => (
   <div className="flex-1 flex items-center justify-center min-h-96">
@@ -233,6 +235,7 @@ export default function App() {
       case 'reports': return <Reporting tasks={scopedTasks} handovers={scopedHandovers} stats={stats} />;
       case 'ai': return <AICopilot tasks={scopedTasks} handovers={scopedHandovers} messages={copilotMessages} setMessages={setCopilotMessages} />;
       case 'settings': return <SettingsView activeTab={settingsTab} setActiveTab={setSettingsTab} />;
+      case 'activity': return <ActivityFeed />;
       default: return <Dashboard {...props} />;
     }
   };
@@ -247,6 +250,7 @@ export default function App() {
     reports: 'Performance Reporting',
     settings: 'System Settings',
     ai: 'Operations Copilot',
+    activity: 'Activity Feed',
   }[activeTab] || 'Operations Hub';
 
   const pageSubtitle = {
@@ -259,6 +263,7 @@ export default function App() {
     reports: 'Statistical synthesis of regional outcomes and closure rates.',
     settings: 'Configure your workspace and preferences.',
     ai: 'AI intelligence layers for the modern workspace.',
+    activity: 'Master-only real-time audit log of all workspace activity.',
   }[activeTab] || '';
 
   return (
@@ -359,6 +364,9 @@ export default function App() {
           onClose={() => setIsGlobalTaskModalOpen(false)}
           onSave={saveTaskFromHeader}
         />
+
+        {/* Master export/import floating bar - visible on every page */}
+        <MasterExportBar activePage={activeTab} />
       </main>
 
       {/* Keyboard shortcuts help */}

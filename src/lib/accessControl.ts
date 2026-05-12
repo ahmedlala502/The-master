@@ -1,6 +1,6 @@
 import { Member, Task, Handover, Office, User } from '../types';
 
-export const APP_PAGES = ['dashboard', 'reports', 'tasks', 'handover', 'offices', 'team', 'ai', 'settings', 'profile'] as const;
+export const APP_PAGES = ['dashboard', 'reports', 'tasks', 'handover', 'offices', 'team', 'ai', 'settings', 'profile', 'activity'] as const;
 export type AppPage = (typeof APP_PAGES)[number];
 
 export const FEATURE_KEYS = [
@@ -71,6 +71,11 @@ export const DEFAULT_WIDGET_CONFIG: WidgetConfig = {
 
 export const DEFAULT_ROLE_PERMISSIONS: RolePermissionMap = {
   'Super Admin': {
+    pages: ALL_PAGES,
+    features: ALL_FEATURES,
+    teams: ['*'],
+  },
+  Master: {
     pages: ALL_PAGES,
     features: ALL_FEATURES,
     teams: ['*'],

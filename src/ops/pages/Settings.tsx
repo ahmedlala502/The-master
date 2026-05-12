@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Settings as SettingsIcon,
   User,
@@ -22,6 +22,7 @@ import {
   Brain,
   Eye,
   EyeOff,
+  Server,
 } from 'lucide-react';
 import { cn } from '../utils';
 import { AI_PROVIDER_PRESETS, AiProviderConfig, AiProviderId } from '../services/geminiService';
@@ -52,6 +53,13 @@ const DEFAULT_AI_PROVIDER: AiProviderConfig = {
 export default function SettingsWorkspace() {
   const [activeRoot, setActiveRoot] = useState('general');
   const [saved, setSaved] = useState(false);
+  const savedTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (savedTimerRef.current !== null) window.clearTimeout(savedTimerRef.current);
+    };
+  }, []);
   const [settings, setSettings] = useState({
     workspaceName: 'TRYGC Super Admin',
     defaultMarket: 'Saudi Arabia',
@@ -70,6 +78,9 @@ export default function SettingsWorkspace() {
     }
   });
   const [showKey, setShowKey] = useState(false);
+  const [supabaseUrl, setSupabaseUrl] = useState(() => localStorage.getItem('trygc-supabase-url') || (import.meta.env.VITE_SUPABASE_URL as string) || '');
+  const [supabaseKey, setSupabaseKey] = useState(() => localStorage.getItem('trygc-supabase-key') || '');
+  const [showSupabaseKey, setShowSupabaseKey] = useState(false);
   const [toggleStates, setToggleStates] = useState<Record<string, boolean>>({
     firestore: true,
     dailyDigest: true,
@@ -87,8 +98,11 @@ export default function SettingsWorkspace() {
 
   const saveSettings = () => {
     localStorage.setItem('trygc-settings', JSON.stringify({ settings, toggleStates, team, aiProvider }));
+    if (supabaseUrl.trim()) localStorage.setItem('trygc-supabase-url', supabaseUrl.trim());
+    if (supabaseKey.trim()) localStorage.setItem('trygc-supabase-key', supabaseKey.trim());
     setSaved(true);
-    window.setTimeout(() => setSaved(false), 1800);
+    if (savedTimerRef.current !== null) window.clearTimeout(savedTimerRef.current);
+    savedTimerRef.current = window.setTimeout(() => setSaved(false), 1800) as unknown as number;
   };
 
   const selectProvider = (provider: AiProviderId) => {
@@ -296,12 +310,65 @@ export default function SettingsWorkspace() {
               )}
 
               {activeRoot === 'cloud' && (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <MetricTile label="Storage Used" value="4.2 MB" detail="10 MB Spark tier" />
-                  <MetricTile label="Read Health" value="99.8%" detail="Stable realtime sync" />
-                  <MetricTile label="Markets Online" value="4" detail="KSA, UAE, EGY, KW" />
-                  <div className="md:col-span-3 rounded-xl border border-border p-4">
-                    <div className="flex items-center gap-2 text-sm font-bold text-foreground"><Globe size={16} className="text-gc-orange" /> Regional Routing</div>
+                <div className="space-y-5">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <MetricTile label="Local Storage" value={`${(Object.keys(localStorage).filter(k => k.startsWith('GC_')).reduce((acc, k) => acc + (localStorage.getItem(k)?.length ?? 0), 0) / 1024).toFixed(1)} KB`} detail="Workspace data keys" />
+                    <MetricTile label="Read Health" value="99.8%" detail="Stable realtime sync" />
+                    <MetricTile label="Markets Online" value="4" detail="KSA, UAE, EGY, KW" />
+                  </div>
+
+                  <div className="rounded-xl border border-border p-4 space-y-4">
+                    <div className="flex items-center gap-2 text-sm font-bold text-foreground">
+                      <Server size={16} className="text-gc-orange" /> Supabase Connection
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">Override the environment defaults. Changes saved here persist in localStorage and take effect on next page load.</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <EditableField
+                        label="Supabase Project URL"
+                        value={supabaseUrl}
+                        onChange={(v) => setSupabaseUrl(v)}
+                      />
+                      <label className="block">
+                        <span className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Supabase Anon Key</span>
+                        <div className="flex gap-2">
+                          <input
+                            className="settings-input flex-1"
+                            type={showSupabaseKey ? 'text' : 'password'}
+                            value={supabaseKey}
+                            placeholder="eyJhbGciO..."
+                            onChange={(e) => setSupabaseKey(e.target.value)}
+                          />
+                          <button className="icon-btn" type="button" onClick={() => setShowSupabaseKey(v => !v)}>
+                            {showSupabaseKey ? <EyeOff size={15} /> : <Eye size={15} />}
+                          </button>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-border p-4 space-y-3">
+                    <div className="flex items-center gap-2 text-sm font-bold text-foreground">
+                      <Database size={16} className="text-gc-orange" /> Local Storage Keys
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">All workspace data stored in browser localStorage. Use the Export / Backup buttons in Admin to download a snapshot.</p>
+                    {['GC_CAMPAIGNS', 'GC_INFLUENCERS', 'GC_BLOCKERS', 'GC_TASKS', 'GC_HANDOVERS', 'GC_NOTIFICATIONS', 'trygc-admin-access-center', 'trygc-settings'].map((key) => {
+                      const raw = localStorage.getItem(key);
+                      const sizeBytes = raw ? new TextEncoder().encode(raw).length : 0;
+                      return (
+                        <div key={key} className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2">
+                          <span className="text-[11px] font-mono font-bold text-foreground truncate">{key}</span>
+                          <span className="text-[10px] font-semibold text-muted-foreground shrink-0">
+                            {sizeBytes > 0 ? `${(sizeBytes / 1024).toFixed(1)} KB` : 'Empty'}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="rounded-xl border border-border p-4">
+                    <div className="flex items-center gap-2 text-sm font-bold text-foreground">
+                      <Globe size={16} className="text-gc-orange" /> Regional Routing
+                    </div>
                     <p className="mt-1 text-xs text-muted-foreground">Production-ready controls for market routing, Firebase project mapping, and export destinations.</p>
                   </div>
                 </div>
