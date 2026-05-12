@@ -160,13 +160,12 @@ export function LocalDataProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  const sanitizeUserPatch = (patch: Partial<LocalWorkspace['user']>, currentUser: LocalWorkspace['user']) => {
+  const sanitizeUserPatch = async (patch: Partial<LocalWorkspace['user']>, currentUser: LocalWorkspace['user']) => {
     if (isMasterAdmin) {
       const nextPatch = { ...patch };
       delete (nextPatch as Record<string, unknown>).isSuperAdmin;
-      // Only hash password if it's actually being changed
-      if (typeof nextPatch.password === 'string' && nextPatch.password.trim() && !nextPatch.password.startsWith('$')) {
-        nextPatch.password = hashPassword(nextPatch.password.trim());
+      if (typeof nextPatch.password === 'string' && nextPatch.password.trim() && !nextPatch.password.startsWith('$PBKDF2$')) {
+        nextPatch.password = await hashPassword(nextPatch.password.trim());
       }
       return {
         ...nextPatch,
@@ -179,13 +178,12 @@ export function LocalDataProvider({ children }: { children: React.ReactNode }) {
     delete (nextPatch as Record<string, unknown>).role;
     delete (nextPatch as Record<string, unknown>).isSuperAdmin;
 
-    // Prevent users from claiming the master admin email
     if (nextPatch.email?.toLowerCase() === MASTER_ADMIN_EMAIL) {
       nextPatch.email = currentUser.email;
     }
 
-    if (typeof nextPatch.password === 'string' && nextPatch.password.trim() && !nextPatch.password.startsWith('$')) {
-      nextPatch.password = hashPassword(nextPatch.password.trim());
+    if (typeof nextPatch.password === 'string' && nextPatch.password.trim() && !nextPatch.password.startsWith('$PBKDF2$')) {
+      nextPatch.password = await hashPassword(nextPatch.password.trim());
     }
 
     return nextPatch;
@@ -214,8 +212,7 @@ export function LocalDataProvider({ children }: { children: React.ReactNode }) {
       return { ok: false, error: 'No approved account was found for this email.' };
     }
 
-    // Verify password using bcrypt
-    const passwordValid = verifyPassword(normalizedPassword, account.password || '');
+    const passwordValid = await verifyPassword(normalizedPassword, account.password || '');
     if (!passwordValid) {
       commit(current => appendAudit(current, 'LOGIN_FAILED', { email: normalizedEmail, reason: 'invalid_password' }, 'warning'));
       return { ok: false, error: 'Incorrect email or password.' };
@@ -264,13 +261,14 @@ export function LocalDataProvider({ children }: { children: React.ReactNode }) {
       return { ok: false, error: 'An access request for this email is already pending admin approval.' };
     }
 
+    const hashedPassword = await hashPassword(trimmedPassword);
     commit(current => appendAudit({
       ...current,
       pendingSignups: [{
         id: createId('signup'),
         name: payload.name.trim(),
         email: normalizedEmail,
-        password: hashPassword(trimmedPassword),
+        password: hashedPassword,
         team: payload.team,
         office: payload.office,
         country: payload.country,
@@ -319,11 +317,11 @@ export function LocalDataProvider({ children }: { children: React.ReactNode }) {
     const account = workspace.users.find(user => user.email.toLowerCase() === workspace.user.email.toLowerCase());
     if (!account) return { ok: false, error: 'User not found' };
 
-    if (!verifyPassword(currentPassword, account.password || '')) {
+    if (!(await verifyPassword(currentPassword, account.password || ''))) {
       return { ok: false, error: 'Current password is incorrect.' };
     }
 
-    const hashedNewPassword = hashPassword(newPassword);
+    const hashedNewPassword = await hashPassword(newPassword);
     commit(current => appendAudit({
       ...current,
       user: { ...current.user, password: hashedNewPassword },
@@ -508,6 +506,7 @@ export function LocalDataProvider({ children }: { children: React.ReactNode }) {
           addToast('Insufficient permissions to add members.', 'error', 4000);
           return;
         }
+        const hashedMemberPassword = member.password ? await hashPassword(member.password) : '';
         commit(current => {
           const createdAt = new Date().toISOString();
           const name = member.name?.trim() || 'New Member';
@@ -517,7 +516,7 @@ export function LocalDataProvider({ children }: { children: React.ReactNode }) {
           const country = member.country || current.user.country;
           const emailBase = name.toLowerCase().replace(/[^a-z0-9]+/g, '.').replace(/^\.+|\.+$/g, '');
           const email = (member.email || `${emailBase || 'user'}@trygc.local`).trim().toLowerCase();
-          const password = member.password ? hashPassword(member.password) : '';
+          const password = hashedMemberPassword;
 
           if (current.users.some(u => u.email.toLowerCase() === email)) {
             addToast('A user with this email already exists.', 'error', 4000);
@@ -606,8 +605,8 @@ export function LocalDataProvider({ children }: { children: React.ReactNode }) {
         commit(current => appendAudit({ ...current, settings }, 'SETTINGS_UPDATE', {}));
       },
       updateUser: async patch => {
+        const safePatch = await sanitizeUserPatch(patch, workspace.user);
         commit(current => {
-          const safePatch = sanitizeUserPatch(patch, current.user);
           const nextUser = { ...current.user, ...safePatch };
           const previousName = current.user.name;
           const previousEmail = current.user.email.toLowerCase();

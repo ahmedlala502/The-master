@@ -24,7 +24,7 @@ const OfficeRegister = lazy(() => import('./components/views/OfficeRegister'));
 const SettingsView = lazy(() => import('./components/views/Settings'));
 const Reporting = lazy(() => import('./components/views/Reporting'));
 const TeamPerformance = lazy(() => import('./components/views/TeamPerformance'));
-const UserProfilePage = lazy(() => import('./components/views/UserProfile'));
+const UserProfilePage = lazy(() => import('./components/views/UserManager'));
 
 const LoadingView = () => (
   <div className="flex-1 flex items-center justify-center min-h-96">
@@ -255,7 +255,7 @@ export default function App() {
     handover: 'Guiding the bridge between outgoing and incoming teams.',
     offices: 'Management of regional operating hubs and regional leads.',
     team: 'Member-level output, on-time rate, and handover accountability.',
-    profile: 'Your personal performance metrics and task history.',
+    profile: 'Manage your profile, credentials, and user access.',
     reports: 'Statistical synthesis of regional outcomes and closure rates.',
     settings: 'Configure your workspace and preferences.',
     ai: 'AI intelligence layers for the modern workspace.',

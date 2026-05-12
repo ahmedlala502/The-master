@@ -15,7 +15,7 @@ export default defineConfig(({ mode }) => {
     },
     // Pre-bundle heavy deps for faster dev startup
     optimizeDeps: {
-      include: ['react', 'react-dom', 'lucide-react', 'motion', 'date-fns', 'bcryptjs'],
+      include: ['react', 'react-dom', 'lucide-react', 'motion', 'date-fns'],
     },
     build: {
       target: 'es2020',
@@ -26,7 +26,6 @@ export default defineConfig(({ mode }) => {
       rollupOptions: {
         output: {
           manualChunks: {
-            'vendor-react': ['react', 'react-dom'],
             charts: ['recharts', 'd3'],
             motion: ['motion'],
             icons: ['lucide-react'],

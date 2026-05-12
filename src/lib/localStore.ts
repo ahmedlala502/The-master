@@ -1,7 +1,6 @@
 import { AuthState, Handover, Member, Office, PendingSignupRequest, Priority, Shift, Status, Task, User, WorkspaceUser } from '../types';
 import { INITIAL_HANDOVERS, INITIAL_MEMBERS, INITIAL_TASKS, INITIAL_USER, MASTER_ADMIN_EMAIL, MASTER_ADMIN_PASSWORD, OFFICES, TEAMS } from '../constants';
 import { DEFAULT_ROLE_PERMISSIONS, DEFAULT_WIDGET_CONFIG, RolePermissionMap, WidgetConfig } from './accessControl';
-import { generateSecureToken, hashPassword } from './authService';
 
 export interface CustomProvider {
   id: string;
@@ -182,7 +181,7 @@ function buildMasterAccount(): WorkspaceUser {
     office: INITIAL_USER.office,
     country: INITIAL_USER.country,
     email: MASTER_ADMIN_EMAIL,
-    password: hashPassword(MASTER_ADMIN_PASSWORD),
+    password: MASTER_ADMIN_PASSWORD,
     team: INITIAL_MEMBERS.find(member => member.name === INITIAL_USER.name)?.team || TEAMS[0],
     status: 'active',
     createdAt: now,
@@ -219,9 +218,7 @@ function migrateWorkspaceUsers(users?: WorkspaceUser[], members?: Member[]): Wor
       createdAt: user.createdAt || new Date().toISOString(),
       approvedAt: user.approvedAt || user.createdAt || new Date().toISOString(),
       isSuperAdmin: user.email?.toLowerCase() === MASTER_ADMIN_EMAIL ? true : user.isSuperAdmin || false,
-      password: user.password && (user.password.startsWith('$2a$') || user.password.startsWith('$2b$') || user.password.startsWith('$2y$'))
-        ? user.password
-        : hashPassword(user.password || ''),
+      password: user.password || '',
     }));
 
   const masterAccount = buildMasterAccount();
@@ -406,7 +403,7 @@ export function resetWorkspace() {
 
 export function createId(prefix: string): string {
   const timestamp = Date.now().toString(36);
-  const random = generateSecureToken().slice(0, 8);
+  const random = Array.from(crypto.getRandomValues(new Uint8Array(4))).map(b => b.toString(16).padStart(2, '0')).join('');
   return `${prefix}-${timestamp}-${random}`;
 }
 

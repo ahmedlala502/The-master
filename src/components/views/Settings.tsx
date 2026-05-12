@@ -1,7 +1,6 @@
-import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
-  Award,
   Bot,
   CheckCircle2,
   ChevronDown,
@@ -18,13 +17,10 @@ import {
   Save,
   Server,
   Settings as SettingsIcon,
-  Shield,
   Sliders,
   Terminal,
   Trash2,
   Upload,
-  User,
-  UserCheck,
   Users,
   Wifi,
   WifiOff,
@@ -33,10 +29,7 @@ import {
 } from 'lucide-react';
 import { useLocalData } from '../LocalDataContext';
 import { CustomProvider, WorkspaceSettings } from '../../lib/localStore';
-import { Status } from '../../types';
 import { APP_PAGES, DEFAULT_ROLE_PERMISSIONS, FEATURE_KEYS, WIDGET_KEYS, resolveRoleName } from '../../lib/accessControl';
-
-const UserManagementPanel = lazy(() => import('./UserManagement'));
 
 interface SettingsProps {
   activeTab?: string;
@@ -44,12 +37,9 @@ interface SettingsProps {
 }
 
 const settingTabs = [
-  { id: 'profile', icon: User, label: 'Profile' },
   { id: 'general', icon: Globe, label: 'General' },
   { id: 'appearance', icon: Palette, label: 'Appearance' },
   { id: 'ai', icon: Bot, label: 'AI & API' },
-  { id: 'security', icon: Shield, label: 'Auth & Users' },
-  { id: 'users', icon: Users, label: 'User Management' },
   { id: 'operations', icon: Sliders, label: 'Ops Engine' },
   { id: 'teams', icon: Users, label: 'Team Roles' },
   { id: 'data', icon: Database, label: 'Data & Audit' },
@@ -106,7 +96,7 @@ const PRESET_ROLES = [
 ];
 
 export default function Settings({ activeTab: controlledTab, setActiveTab: setControlledTab }: SettingsProps) {
-  const { user, settings, members, pendingSignups, tasks, handovers, auditLogs, updateSettings, updateUser, addMember, updateMember, deleteMember, approveSignup, rejectSignup, exportWorkspace, importData, resetData, isMasterAdmin, lock, logout } = useLocalData();
+  const { user, settings, members, pendingSignups, tasks, handovers, auditLogs, updateSettings, addMember, updateMember, deleteMember, approveSignup, rejectSignup, exportWorkspace, importData, resetData, isMasterAdmin, hasAdminAccess } = useLocalData();
   const [internalTab, setInternalTab] = useState(controlledTab || 'general');
   const activeTab = controlledTab || internalTab;
   const setActiveTab = setControlledTab || setInternalTab;
@@ -116,11 +106,10 @@ export default function Settings({ activeTab: controlledTab, setActiveTab: setCo
   const [showConfirmReset, setShowConfirmReset] = useState(false);
   const [config, setConfig] = useState(settings);
   const configRef = useRef(config);
-  const [profile, setProfile] = useState(user);
   const [newTeam, setNewTeam] = useState('');
   const [importError, setImportError] = useState('');
   const [importSuccess, setImportSuccess] = useState('');
-  const isAdmin = isAdminUser(user.role);
+  const isAdmin = isAdminUser(user.role) || hasAdminAccess;
 
   // AI tab state
   const [apiKeys, setApiKeys] = useState<Record<string, string>>(loadApiKeys);
@@ -135,10 +124,7 @@ export default function Settings({ activeTab: controlledTab, setActiveTab: setCo
   const [copiedMcp, setCopiedMcp] = useState(false);
   const [selectedRole, setSelectedRole] = useState('Super Admin');
   const canManageWorkspace = isMasterAdmin;
-  const visibleTabs = useMemo(
-    () => settingTabs.filter(tab => canManageWorkspace || tab.id === 'profile'),
-    [canManageWorkspace]
-  );
+  const visibleTabs = settingTabs;
 
   // Keep ref up to date
   useEffect(() => { configRef.current = config; }, [config]);
@@ -150,15 +136,9 @@ export default function Settings({ activeTab: controlledTab, setActiveTab: setCo
   const providerEndpoints: Record<string, string> = config.providerEndpoints || {};
 
   useEffect(() => { setConfig(settings); configRef.current = settings; }, [settings]);
-  useEffect(() => setProfile(user), [user]);
   useEffect(() => {
     if (settings.mcpConfig) setMcpConfig(settings.mcpConfig);
   }, [settings.mcpConfig]);
-  useEffect(() => {
-    if (!canManageWorkspace && activeTab !== 'profile') {
-      setActiveTab('profile');
-    }
-  }, [activeTab, canManageWorkspace, setActiveTab]);
 
   // Unsaved changes detection
   const hasUnsaved = useMemo(() => {
@@ -204,23 +184,6 @@ export default function Settings({ activeTab: controlledTab, setActiveTab: setCo
     const next = { ...configRef.current, aiProvider: providerId, aiModel: model };
     setConfig(next);
     saveConfig(next);
-  };
-
-  const saveProfile = async () => {
-    setSaving(true);
-    try { await updateUser(profile); } finally { setSaving(false); }
-  };
-
-  const switchToMember = (member: typeof members[0]) => {
-    const profile = {
-      name: member.name,
-      role: member.role || user.role,
-      office: member.office,
-      country: member.country,
-      email: user.email,
-    };
-    updateUser(profile);
-    setProfile(profile);
   };
 
   const handleThemeChange = (themeId: string) => {
@@ -351,39 +314,6 @@ export default function Settings({ activeTab: controlledTab, setActiveTab: setCo
     ...(config.customProviders || []).map(p => ({ id: p.id, name: p.name, badge: '⬡', defaultModel: p.defaultModel, keyPlaceholder: 'API key', color: 'bg-teal-500', adminOnly: false })),
   ];
 
-  // Current user's performance computed from live data
-  const myStats = useMemo(() => {
-    const myTasks = tasks.filter(t => t.owner === user.name || t.owner === user.email);
-    const myHandovers = handovers.filter(h => h.outgoing === user.name);
-    const completed = myTasks.filter(t => t.status === Status.DONE).length;
-    const inProgress = myTasks.filter(t => t.status !== Status.DONE && t.status !== 'Blocked' as any).length;
-    const blocked = myTasks.filter(t => t.status === 'Blocked' as any).length;
-    const acked = myHandovers.filter(h => h.status === 'Acknowledged').length;
-    return {
-      total: myTasks.length,
-      completed,
-      inProgress,
-      blocked,
-      handoversOut: myHandovers.length,
-      onTimeRate: myHandovers.length > 0 ? Math.round((acked / myHandovers.length) * 100) : 100,
-    };
-  }, [tasks, handovers, user.name, user.email]);
-
-  const getUserMetrics = (name: string) => {
-    const ownedTasks = tasks.filter(task => task.owner === name);
-    const completed = ownedTasks.filter(task => task.status === Status.DONE).length;
-    const blocked = ownedTasks.filter(task => task.status === Status.BLOCKED).length;
-    const inProgress = ownedTasks.filter(task => task.status === Status.IN_PROGRESS || task.status === Status.WAITING).length;
-    const carry = ownedTasks.filter(task => task.carry && task.status !== Status.DONE).length;
-    const handoversOut = handovers.filter(handover => handover.outgoing === name).length;
-    const acknowledgedHandovers = handovers.filter(handover => handover.outgoing === name && handover.status === 'Acknowledged').length;
-    const onTimeRate = handoversOut > 0 ? Math.round((acknowledgedHandovers / handoversOut) * 100) : completed > 0 ? Math.round((completed / Math.max(ownedTasks.length, 1)) * 100) : 100;
-    const productivity = Math.round(Math.min(100, completed * 12 + handoversOut * 6 + Math.max(0, 20 - blocked * 8)));
-    return { total: ownedTasks.length, completed, blocked, inProgress, carry, handoversOut, onTimeRate, productivity };
-  };
-
-  const activeProfileMetrics = getUserMetrics(user.name);
-
   const roleProfiles = config.rolePermissions || DEFAULT_ROLE_PERMISSIONS;
   const editableRoleProfile = roleProfiles[selectedRole] || DEFAULT_ROLE_PERMISSIONS[resolveRoleName(selectedRole)];
 
@@ -463,83 +393,6 @@ export default function Settings({ activeTab: controlledTab, setActiveTab: setCo
         </div>
 
         <div className="col-span-9 bg-white border border-dawn rounded-[32px] p-10 shadow-2xl min-h-[640px]">
-
-          {/* ── Profile ── */}
-          {activeTab === 'profile' && (
-            <Panel title="My Profile" desc="Your identity across tasks, handovers, and reports.">
-              <div className="space-y-8">
-                <div className="grid grid-cols-4 gap-4">
-                  <StatBox label="Productivity" value={`${activeProfileMetrics.productivity}%`} sub="live profile score" color="text-citrus" />
-                  <StatBox label="Tasks Owned" value={activeProfileMetrics.total} sub={`${activeProfileMetrics.inProgress} active now`} color="text-blue-600" />
-                  <StatBox label="Carry-over" value={activeProfileMetrics.carry} sub="still open" color="text-amber-600" />
-                  <StatBox label="Blocked" value={activeProfileMetrics.blocked} sub="needs attention" color="text-red-500" />
-                </div>
-
-                {/* Profile form */}
-                <div className="grid grid-cols-2 gap-6">
-                  <Field label="Full Name"><input className={inputClass} value={profile.name} onChange={e => setProfile({ ...profile, name: e.target.value })} /></Field>
-                  <Field label="Role"><input className={inputClass} value={profile.role} onChange={e => setProfile({ ...profile, role: e.target.value })} disabled={!isMasterAdmin} /></Field>
-                  <Field label="Office"><input className={inputClass} value={profile.office} onChange={e => setProfile({ ...profile, office: e.target.value })} /></Field>
-                  <Field label="Country"><input className={inputClass} value={profile.country} onChange={e => setProfile({ ...profile, country: e.target.value })} /></Field>
-                  <Field label="Email"><input className={inputClass} value={profile.email} onChange={e => setProfile({ ...profile, email: e.target.value })} /></Field>
-                  <Field label="Passcode">
-                    <input className={inputClass} type="password" value={profile.password || ''} onChange={e => setProfile({ ...profile, password: e.target.value })} placeholder="Set your passcode" />
-                  </Field>
-                </div>
-                <button onClick={saveProfile} className="px-8 py-3 bg-ink text-white rounded-xl text-xs font-black uppercase tracking-widest hover:scale-[1.02] transition-all">Save Profile</button>
-
-                {/* Performance stats */}
-                <div className="p-6 bg-stone/30 rounded-3xl border border-dawn space-y-4">
-                  <div className="flex items-center gap-2 text-muted">
-                    <Award className="w-4 h-4" />
-                    <span className="text-[10px] font-black uppercase tracking-[0.2em]">My Performance</span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-4">
-                    <StatBox label="Tasks Done" value={myStats.completed} sub={`of ${myStats.total}`} color="text-green-600" />
-                    <StatBox label="Handovers Out" value={myStats.handoversOut} sub="total" color="text-blue-600" />
-                    <StatBox label="On-Time Rate" value={`${myStats.onTimeRate}%`} sub="handovers acked" color="text-citrus" />
-                  </div>
-                  <div className="flex gap-4 text-[10px] font-bold text-muted pt-2 border-t border-dawn">
-                    <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm bg-amber-400 inline-block" />{myStats.inProgress} in progress</span>
-                    <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm bg-red-400 inline-block" />{myStats.blocked} blocked</span>
-                  </div>
-                </div>
-
-                {/* Switch account */}
-                {canManageWorkspace && members.length > 0 && (
-                  <div>
-                    <div className="flex items-center gap-2 text-muted mb-4">
-                      <UserCheck className="w-4 h-4" />
-                      <span className="text-[10px] font-black uppercase tracking-[0.2em]">Switch Account</span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      {members.map(m => {
-                        const isCurrentUser = m.name === user.name;
-                        return (
-                          <button
-                            key={m.id}
-                            onClick={() => !isCurrentUser && switchToMember(m)}
-                            disabled={isCurrentUser}
-                            className={`flex items-center gap-3 p-4 rounded-2xl border text-left transition-all ${isCurrentUser ? 'border-citrus bg-citrus/5 cursor-default' : 'border-dawn bg-stone/20 hover:border-ink hover:bg-stone/40'}`}
-                          >
-                            <div className="w-10 h-10 rounded-xl bg-white border border-dawn flex items-center justify-center text-xs font-black text-muted shrink-0">
-                              {m.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
-                            </div>
-                            <div className="min-w-0">
-                              <span className="block text-sm font-black text-ink truncate">{m.name}</span>
-                              <span className="block text-[9px] font-bold text-muted uppercase tracking-widest truncate">{m.role || m.team}</span>
-                              <span className="block text-[9px] font-bold text-muted/60">{getUserMetrics(m.name).productivity}% productivity · {m.office}</span>
-                            </div>
-                            {isCurrentUser && <span className="ml-auto text-[8px] font-black text-citrus uppercase tracking-widest">Active</span>}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </Panel>
-          )}
 
           {/* ── General ── */}
           {canManageWorkspace && activeTab === 'general' && (
@@ -784,61 +637,7 @@ export default function Settings({ activeTab: controlledTab, setActiveTab: setCo
             </Panel>
           )}
 
-          {/* ── Security / Auth ── */}
-          {canManageWorkspace && activeTab === 'security' && (
-            <Panel title="Authentication & Security" desc="Session and access control settings for this local workspace.">
-              <div className="grid grid-cols-2 gap-5">
-                <Field label="Auth Mode">
-                  <select className={inputClass} value={config.authMode || 'none'} onChange={e => { const next = { ...configRef.current, authMode: e.target.value as any }; setConfig(next); saveConfig(next); }}>
-                    <option value="none">No Login Required</option>
-                    <option value="local">Local Passcode</option>
-                  </select>
-                </Field>
-                <Field label="Min Passcode Length"><input type="number" className={inputClass} value={config.minPasscodeLength || 6} onChange={e => { const next = { ...configRef.current, minPasscodeLength: Number(e.target.value) }; setConfig(next); }} onBlur={() => saveConfig()} /></Field>
-              </div>
-              <div className="mt-6 p-6 bg-stone/30 border border-dawn rounded-3xl space-y-4">
-                <div className="flex items-center gap-2 text-muted mb-2">
-                  <Shield className="w-4 h-4" />
-                  <span className="text-[10px] font-black uppercase tracking-[0.2em]">Active Session</span>
-                </div>
-                <div className="flex items-center justify-between p-5 bg-white border border-dawn rounded-2xl">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-ink text-white flex items-center justify-center text-xs font-black">{user.name.split(' ').map(n => n[0]).join('').slice(0, 2)}</div>
-                    <div>
-                      <b className="block text-sm text-ink">{user.name}</b>
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-muted">{user.role}</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {isMasterAdmin && <span className="px-2 py-1 bg-citrus/10 text-citrus rounded-lg text-[9px] font-black uppercase tracking-widest">Master Admin</span>}
-                    {!isMasterAdmin && isAdmin && <span className="px-2 py-1 bg-amber-50 text-amber-600 rounded-lg text-[9px] font-black uppercase tracking-widest">Admin</span>}
-                    <span className="px-2 py-1 bg-green-50 text-green-600 rounded-lg text-[9px] font-black uppercase tracking-widest">Active</span>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between">
-                  <p className="text-[10px] font-bold text-muted/60">
-                    To manage team members and assign roles, go to <button className="text-citrus underline" onClick={() => setActiveTab('users')}>User Management</button>.
-                  </p>
-                  <button
-                    onClick={() => {
-                      if (window.confirm('Lock your session? You will need to re-enter your passcode.')) {
-                        lock();
-                        logout();
-                      }
-                    }}
-                    className="px-4 py-2 bg-stone border border-dawn rounded-xl text-[9px] font-black uppercase tracking-widest text-muted hover:text-ink transition-all"
-                  >
-                    Lock Session
-                  </button>
-                </div>
-              </div>
-            </Panel>
-          )}
 
-          {/* ── User Management (extracted component) ── */}
-          {canManageWorkspace && activeTab === 'users' && (
-            <UserManagementPanel />
-          )}
 
           {/* ── Operations ── */}
           {canManageWorkspace && activeTab === 'operations' && (

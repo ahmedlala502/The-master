@@ -1,168 +1,114 @@
-import * as bcrypt from 'bcryptjs';
+// ─────────────────────────────────────────────────────────────────
+// Auth Service — PBKDF2 password hashing + session utilities
+// ─────────────────────────────────────────────────────────────────
 
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const ALGORITHM  = 'PBKDF2';
+const ITERATIONS = 600_000;
+const SALT_BYTES = 16;
+const HASH_BYTES = 32;
 
-const PASSWORD_REQUIREMENTS = {
-  minLength: 8,
-  hasUppercase: /[A-Z]/,
-  hasLowercase: /[a-z]/,
-  hasNumber: /[0-9]/,
-  hasSpecial: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/,
-};
+// ── Encoding helpers ──────────────────────────────────────────────
 
-export interface ValidationResult {
-  valid: boolean;
-  errors: string[];
-  score?: number;
+function toBase64(bytes: Uint8Array): string {
+  let bin = '';
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin);
 }
 
-export function validateEmail(email: string): ValidationResult {
-  const errors: string[] = [];
-  if (!email?.trim()) errors.push('Email is required');
-  else if (!EMAIL_REGEX.test(email.trim())) errors.push('Email format is invalid');
-  return { valid: errors.length === 0, errors };
+function fromBase64(b64: string): Uint8Array {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
 }
 
-export function validatePassword(password: string): ValidationResult {
-  const errors: string[] = [];
-  if (!password) {
-    errors.push('Password is required');
-    return { valid: false, errors, score: 0 };
-  }
-
-  if (password.length < PASSWORD_REQUIREMENTS.minLength) {
-    errors.push(`Password must be at least ${PASSWORD_REQUIREMENTS.minLength} characters`);
-  }
-  if (!PASSWORD_REQUIREMENTS.hasUppercase.test(password)) {
-    errors.push('Password must contain at least one uppercase letter');
-  }
-  if (!PASSWORD_REQUIREMENTS.hasLowercase.test(password)) {
-    errors.push('Password must contain at least one lowercase letter');
-  }
-  if (!PASSWORD_REQUIREMENTS.hasNumber.test(password)) {
-    errors.push('Password must contain at least one number');
-  }
-  if (!PASSWORD_REQUIREMENTS.hasSpecial.test(password)) {
-    errors.push('Password must contain at least one special character');
-  }
-
-  let score = 0;
-  if (password.length >= 8) score += 20;
-  if (password.length >= 12) score += 20;
-  if (PASSWORD_REQUIREMENTS.hasUppercase.test(password)) score += 20;
-  if (PASSWORD_REQUIREMENTS.hasLowercase.test(password)) score += 20;
-  if (PASSWORD_REQUIREMENTS.hasNumber.test(password)) score += 10;
-  if (PASSWORD_REQUIREMENTS.hasSpecial.test(password)) score += 10;
-
-  return { valid: errors.length === 0, errors, score };
+async function pbkdf2(password: string, salt: Uint8Array, iterations: number): Promise<Uint8Array> {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(password),
+    { name: 'PBKDF2' },
+    false,
+    ['deriveBits'],
+  );
+  const bits = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', salt, iterations, hash: 'SHA-256' },
+    key,
+    HASH_BYTES * 8,
+  );
+  return new Uint8Array(bits);
 }
 
-export function validateName(name: string): ValidationResult {
-  const errors: string[] = [];
-  if (!name?.trim()) errors.push('Name is required');
-  else if (name.trim().length < 2) errors.push('Name must be at least 2 characters');
-  else if (name.trim().length > 100) errors.push('Name must be less than 100 characters');
-  return { valid: errors.length === 0, errors };
+// ── Public API ────────────────────────────────────────────────────
+
+export async function hashPassword(password: string): Promise<string> {
+  const salt = crypto.getRandomValues(new Uint8Array(SALT_BYTES));
+  const hash = await pbkdf2(password, salt, ITERATIONS);
+  return `$${ALGORITHM}$${ITERATIONS}$${toBase64(salt)}$${toBase64(hash)}`;
 }
 
-export function hashPassword(password: string): string {
+export async function verifyPassword(password: string, stored: string): Promise<boolean> {
   try {
-    if (!password || password.trim().length === 0) {
-      throw new Error('Password cannot be empty');
-    }
-    
-    const salt = bcrypt.genSaltSync(12);
-    return bcrypt.hashSync(password, salt);
-  } catch (error) {
-    console.error('CRITICAL: Password hashing failed:', error);
-    // SECURITY: Do NOT use fallback hashing - this is a critical security failure
-    // Throw error instead of creating insecure hash
-    throw new Error('Password hashing failed. Please ensure bcryptjs is properly installed.');
-  }
-}
+    if (!password || !stored) return false;
 
-export function verifyPassword(password: string, hash: string): boolean {
-  try {
-    if (!hash || !password) {
-      return false;
-    }
-    
-    if (hash.startsWith('$legacy$')) {
-      // SECURITY: Legacy password hashes are no longer supported
-      // Users with legacy hashes must reset their password
-      console.warn('Legacy password hash detected - password reset required');
-      return false;
-    }
-    
-    // Only accept bcrypt hashes
-    if (hash.startsWith('$2a$') || hash.startsWith('$2b$') || hash.startsWith('$2y$')) {
-      return bcrypt.compareSync(password, hash);
-    }
-    
-    // Unknown hash format - reject for security
-    console.error('Invalid password hash format detected');
-    return false;
-  } catch (error) {
-    console.error('Password verification failed:', error);
+    // Legacy plain-text passwords (migration path)
+    if (!stored.startsWith('$')) return password === stored;
+
+    const parts = stored.split('$');
+    if (parts.length < 5 || parts[1] !== ALGORITHM) return false;
+
+    const iterations = parseInt(parts[2], 10);
+    const salt       = fromBase64(parts[3]);
+    const expected   = parts[4];
+    const derived    = await pbkdf2(password, salt, iterations);
+
+    return toBase64(derived) === expected;
+  } catch {
     return false;
   }
 }
 
 export function generateSessionId(): string {
-  const timestamp = Date.now().toString(36);
-  const randomStr = Array.from(crypto.getRandomValues(new Uint8Array(16)))
+  const ts  = Date.now().toString(36);
+  const rnd = Array.from(crypto.getRandomValues(new Uint8Array(12)))
     .map(b => b.toString(36))
     .join('')
-    .slice(0, 16);
-  return `session-${timestamp}-${randomStr}`;
+    .slice(0, 12);
+  return `sid_${ts}_${rnd}`;
 }
 
-export function generateVerificationCode(): string {
-  return Array.from(crypto.getRandomValues(new Uint8Array(4)))
-    .map(b => (b % 36).toString(36).toUpperCase())
-    .join('');
-}
-
-export function generateSecureToken(): string {
-  return Array.from(crypto.getRandomValues(new Uint8Array(32)))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
-}
-
-export function validateSignupData(data: {
-  name?: string;
-  email?: string;
-  password?: string;
-}): ValidationResult {
-  const errors: string[] = [];
-
-  const nameValidation = validateName(data.name || '');
-  if (!nameValidation.valid) errors.push(...nameValidation.errors);
-
-  const emailValidation = validateEmail(data.email || '');
-  if (!emailValidation.valid) errors.push(...emailValidation.errors);
-
-  const passwordValidation = validatePassword(data.password || '');
-  if (!passwordValidation.valid) errors.push(...passwordValidation.errors);
-
-  return {
-    valid: errors.length === 0,
-    errors,
-  };
-}
-
-export function isSessionExpired(expiresAt?: number, currentTime: number = Date.now()): boolean {
-  if (!expiresAt) return false;
-  return currentTime > expiresAt;
-}
-
-export function calculateSessionExpiration(hours: number = 24): number {
+export function calculateSessionExpiration(hours = 24): number {
   return Date.now() + hours * 60 * 60 * 1000;
 }
 
-export function sanitizeInput(input: string, maxLength: number = 1000): string {
-  return input
-    .slice(0, maxLength)
-    .replace(/[<>]/g, '')
-    .trim();
+export function isSessionExpired(expiresAt?: number): boolean {
+  return expiresAt ? Date.now() > expiresAt : false;
+}
+
+// ── Validation helpers (used by forms) ───────────────────────────
+
+export function validateEmail(email: string): { valid: boolean; error: string } {
+  const trimmed = email.trim();
+  if (!trimmed) return { valid: false, error: 'Email is required.' };
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed))
+    return { valid: false, error: 'Enter a valid email address.' };
+  return { valid: true, error: '' };
+}
+
+export function validatePasswordField(password: string, minLength = 6): { valid: boolean; error: string } {
+  if (!password) return { valid: false, error: 'Password is required.' };
+  if (password.length < minLength)
+    return { valid: false, error: `Password must be at least ${minLength} characters.` };
+  return { valid: true, error: '' };
+}
+
+/** Quick strength score 0–100 for the signup form indicator only. */
+export function passwordStrengthScore(password: string): number {
+  if (!password) return 0;
+  let score = 0;
+  if (password.length >= 6)  score += 20;
+  if (password.length >= 10) score += 20;
+  if (/[A-Z]/.test(password)) score += 20;
+  if (/[0-9]/.test(password)) score += 20;
+  if (/[^A-Za-z0-9]/.test(password)) score += 20;
+  return score;
 }

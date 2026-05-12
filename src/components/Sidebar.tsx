@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, CheckSquare, RefreshCw, Globe, MessageSquare, Settings, LogOut, TrendingUp, Users, Lock, ChevronLeft, ChevronRight, Bell, Shield } from 'lucide-react';
+import { Home, CheckSquare, RefreshCw, Globe, MessageSquare, Settings, LogOut, TrendingUp, User as UserIcon, Users, Lock, ChevronLeft, ChevronRight, Bell, Shield } from 'lucide-react';
 import { useLocalData } from './LocalDataContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn, getInitials, generateAvatarColor } from '../utils';
@@ -33,6 +33,7 @@ export default function Sidebar({ activeTab, setActiveTab, openSettingsTab, stat
     { id: 'offices', label: 'Office Map', icon: Globe },
     { id: 'team', label: 'Team Performance', icon: Users },
     { section: 'System' },
+    { id: 'profile', label: 'User Manager', icon: UserIcon },
     { id: 'settings', label: 'Settings & Config', icon: Settings },
   ];
 
@@ -194,7 +195,7 @@ export default function Sidebar({ activeTab, setActiveTab, openSettingsTab, stat
                 className="space-y-1"
               >
                 <button
-                  onClick={() => openSettingsTab ? openSettingsTab('profile') : setActiveTab('settings')}
+                  onClick={() => setActiveTab('profile')}
                   className="w-full flex items-center gap-2 p-2 text-xs font-bold transition-colors rounded-lg text-muted hover:text-ink hover:bg-white/60"
                 >
                   <Settings className="w-3.5 h-3.5" />
