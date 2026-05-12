@@ -2,12 +2,11 @@ import React, { useState } from 'react';
 import { useAuth } from '../App';
 import { Button } from '../components/ui/button';
 import { ShieldCheck, Command } from 'lucide-react';
-import { localAuth } from '../services/localAuth';
 
 export default function Login() {
   const { login } = useAuth();
-  const [email, setEmail] = useState(localAuth.defaultAdminEmail);
-  const [password, setPassword] = useState(localAuth.defaultAdminPassword);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -40,7 +39,7 @@ export default function Login() {
       <div className="w-full max-w-sm space-y-6 rounded-xl border border-border bg-card p-8 shadow-2xl">
         <div className="space-y-2 text-center">
           <h2 className="font-condensed text-[20px] font-bold uppercase tracking-tight">Authentication Required</h2>
-          <p className="text-[12px] text-muted-foreground font-medium">Sign in with a local workspace account to access the operations dashboard.</p>
+          <p className="text-[12px] text-muted-foreground font-medium">Sign in with your Supabase workspace account to access the operations dashboard.</p>
         </div>
 
         <form onSubmit={handleLogin} className="space-y-4">
@@ -85,7 +84,7 @@ export default function Login() {
         
         <div className="flex items-center justify-center gap-2 pt-4 text-[10px] uppercase tracking-wider text-muted-foreground/60 font-bold font-condensed">
           <ShieldCheck className="h-3.5 w-3.5" />
-          <span>Local Workspace Access</span>
+          <span>Supabase Secure Access</span>
         </div>
       </div>
       

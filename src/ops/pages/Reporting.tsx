@@ -1,21 +1,23 @@
-import React, { useEffect, useState } from 'react';
-import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
-import { db } from '../lib/firebase';
-import { 
-  FileText, 
-  Download, 
-  ExternalLink, 
-  Search,
-  Filter,
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  AlertTriangle,
   BarChart3,
-  PieChart as PieChartIcon
+  Building2,
+  CheckSquare,
+  Clock3,
+  Download,
+  FileSpreadsheet,
+  FolderKanban,
+  Handshake,
+  Search,
+  ShieldAlert,
+  Users2,
+  Workflow,
 } from 'lucide-react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
+import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { Badge } from '../components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
-import { exportCampaigns } from '../services/spreadsheetService';
-import { dataService } from '../services/dataService';
 import {
   Table,
   TableBody,
@@ -23,230 +25,646 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "../components/ui/table";
-import { 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
+} from '../components/ui/table';
+import { dataService } from '../services/dataService';
+import { exportRows, exportRowsAsCsv, exportWorkbook } from '../services/spreadsheetService';
+import { useAuth } from '../App';
+import {
+  filterBlockersByRole,
+  filterCampaignsByRole,
+  filterHandoversByRole,
+  filterTasksByRole,
+} from '../lib/workspace';
+import { INITIAL_MEMBERS, OFFICES, TEAMS } from '../../constants';
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
   ResponsiveContainer,
-  Cell
+  Tooltip,
+  XAxis,
+  YAxis,
 } from 'recharts';
 
+type PillarKey =
+  | 'offices'
+  | 'teams'
+  | 'agents'
+  | 'tasks'
+  | 'handovers'
+  | 'sla'
+  | 'blockers'
+  | 'campaigns';
+
+type DataRow = Record<string, string | number>;
+
+type PillarReport = {
+  key: PillarKey;
+  label: string;
+  description: string;
+  value: string;
+  insight: string;
+  rows: DataRow[];
+};
+
+const PILLAR_META: Array<{
+  key: PillarKey;
+  label: string;
+  description: string;
+  icon: React.ComponentType<{ className?: string }>;
+  tone: string;
+}> = [
+  { key: 'offices', label: 'Offices', description: 'Regional command coverage and load distribution.', icon: Building2, tone: '#f97316' },
+  { key: 'teams', label: 'Teams', description: 'Execution quality and team productivity.', icon: Workflow, tone: '#f59e0b' },
+  { key: 'agents', label: 'Agents', description: 'Individual throughput and ownership depth.', icon: Users2, tone: '#8b5cf6' },
+  { key: 'tasks', label: 'Tasks', description: 'Task flow, completion, and pending backlog.', icon: CheckSquare, tone: '#14b8a6' },
+  { key: 'handovers', label: 'Handovers', description: 'Shift relay health and acknowledgement quality.', icon: Handshake, tone: '#6366f1' },
+  { key: 'sla', label: 'SLA', description: 'On-time delivery, due-soon, and overdue pressure.', icon: Clock3, tone: '#22c55e' },
+  { key: 'blockers', label: 'Blockers', description: 'Risk concentration by owner and severity.', icon: ShieldAlert, tone: '#ef4444' },
+  { key: 'campaigns', label: 'Campaigns', description: 'Portfolio health, budget, and ownership.', icon: FolderKanban, tone: '#0ea5e9' },
+];
+
+const CHART_COLORS = ['#f97316', '#f59e0b', '#8b5cf6', '#14b8a6', '#6366f1', '#22c55e', '#ef4444', '#0ea5e9'];
+
+function normalize(value: string | undefined | null) {
+  return (value || '').trim();
+}
+
+function toTitle(text: string) {
+  return text.replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function currency(value: number) {
+  return `$${value.toLocaleString()}`;
+}
+
+function percent(value: number) {
+  return `${Math.round(value)}%`;
+}
+
+function isOverdue(dueDate: number | undefined, completed: boolean) {
+  return !completed && typeof dueDate === 'number' && dueDate < Date.now();
+}
+
+function isDueSoon(dueDate: number | undefined, completed: boolean) {
+  if (completed || typeof dueDate !== 'number') return false;
+  const diff = dueDate - Date.now();
+  return diff >= 0 && diff <= 1000 * 60 * 60 * 24;
+}
+
+function formatDueDate(dueDate: number | undefined) {
+  if (!dueDate) return 'N/A';
+  return new Date(dueDate).toLocaleDateString();
+}
+
+function buildRowsMap<T>(items: T[], getKey: (item: T) => string) {
+  return items.reduce<Record<string, T[]>>((acc, item) => {
+    const key = normalize(getKey(item)) || 'Unassigned';
+    acc[key] = [...(acc[key] || []), item];
+    return acc;
+  }, {});
+}
+
 export default function Reporting() {
-  const [campaigns, setCampaigns] = useState<any[]>([]);
+  const { role } = useAuth();
+  const [selectedPillar, setSelectedPillar] = useState<PillarKey>('campaigns');
   const [searchTerm, setSearchTerm] = useState('');
+  const [, setRefreshNonce] = useState(0);
 
   useEffect(() => {
-    const q = query(collection(db, 'campaigns'), orderBy('name', 'asc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      setCampaigns(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
-    return unsubscribe;
+    const refresh = () => setRefreshNonce((value) => value + 1);
+    window.addEventListener('storage', refresh);
+    window.addEventListener('focus', refresh);
+    return () => {
+      window.removeEventListener('storage', refresh);
+      window.removeEventListener('focus', refresh);
+    };
   }, []);
 
-  const chartData = [
-    { name: 'Active', value: campaigns.filter(c => c.stage < 18).length },
-    { name: 'Completed', value: campaigns.filter(c => c.stage === 18).length },
-    { name: 'Blocked', value: campaigns.filter(c => c.blockerStatus).length },
-  ];
+  const reports = useMemo(() => {
+    const tasks = filterTasksByRole(role, dataService.getTasks());
+    const handovers = filterHandoversByRole(role, dataService.getHandovers());
+    const blockers = filterBlockersByRole(role, dataService.getBlockers());
+    const campaigns = filterCampaignsByRole(role, dataService.getCampaigns());
 
-const COLORS = ['#f97316', '#6b21a8', '#ef4444'];
-  const activeCampaigns = campaigns.filter(c => Number(c.stage) < 18);
-  const completedCampaigns = campaigns.filter(c => Number(c.stage) === 18);
-  const blockedCampaigns = campaigns.filter(c => Boolean(c.blockerStatus));
-  const totalBudget = campaigns.reduce((sum, campaign) => sum + Number(campaign.budget || 0), 0);
-  const marketInsights = Object.entries(
-    campaigns.reduce((acc, campaign) => {
-      const key = campaign.country || 'Unknown';
-      acc[key] = (acc[key] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>)
-  ).map(([name, value]) => ({ name, value: Number(value) }));
+    const directoryFromMembers = INITIAL_MEMBERS.map((member) => ({
+      name: member.name,
+      team: member.team,
+      office: member.office,
+      country: member.country,
+      role: member.role,
+      status: member.status,
+    }));
 
-  const filteredCampaigns = campaigns.filter((campaign) => {
-    const queryValue = searchTerm.trim().toLowerCase();
-    if (!queryValue) return true;
-    return `${campaign.name || ''} ${campaign.clientId || ''} ${campaign.brandId || ''} ${campaign.country || ''}`.toLowerCase().includes(queryValue);
-  });
+    const observedNames = new Set<string>();
+    tasks.forEach((task) => observedNames.add(normalize(task.ownerId)));
+    handovers.forEach((handover) => {
+      observedNames.add(normalize(handover.outgoingLead));
+      observedNames.add(normalize(handover.incomingLead));
+    });
+    blockers.forEach((blocker) => observedNames.add(normalize(blocker.ownerId)));
+    campaigns.forEach((campaign) => {
+      observedNames.add(normalize(campaign.currentOwner));
+      campaign.internalOwners.forEach((owner) => observedNames.add(normalize(owner)));
+    });
 
-  const handleExportAll = () => {
-    const localCampaigns = dataService.getCampaigns();
-    exportCampaigns(localCampaigns);
-  };
+    const memberMap = new Map(directoryFromMembers.map((member) => [member.name, member]));
+
+    const agents = Array.from(observedNames)
+      .filter(Boolean)
+      .map((name) => {
+        const seed = memberMap.get(name);
+        return {
+          name,
+          team: seed?.team || (name.toLowerCase().includes('mona') ? 'Community Team' : 'Operations Team'),
+          office: seed?.office || 'Cairo HQ',
+          country: seed?.country || 'EG',
+          role: seed?.role || 'Operator',
+          status: seed?.status || 'active',
+        };
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    const officeLookup = new Map(OFFICES.map((office) => [office.name, office]));
+    const agentLookup = new Map(agents.map((agent) => [agent.name, agent]));
+
+    const tasksByOwner = buildRowsMap(tasks, (task) => task.ownerId);
+    const blockersByOwner = buildRowsMap(blockers, (blocker) => blocker.ownerId);
+    const handoversByOutgoing = buildRowsMap(handovers, (handover) => handover.outgoingLead);
+    const campaignsByOwner = buildRowsMap(campaigns, (campaign) => campaign.currentOwner);
+
+    const officeRows: DataRow[] = OFFICES.map((office) => {
+      const officeAgents = agents.filter((agent) => agent.office === office.name);
+      const officeAgentNames = new Set(officeAgents.map((agent) => agent.name));
+      const officeTasks = tasks.filter((task) => officeAgentNames.has(normalize(task.ownerId)));
+      const officeHandovers = handovers.filter(
+        (handover) =>
+          officeAgentNames.has(normalize(handover.outgoingLead)) ||
+          officeAgentNames.has(normalize(handover.incomingLead)),
+      );
+      const officeBlockers = blockers.filter((blocker) => officeAgentNames.has(normalize(blocker.ownerId)));
+      const officeCampaigns = campaigns.filter((campaign) => officeAgentNames.has(normalize(campaign.currentOwner)));
+      const doneTasks = officeTasks.filter((task) => task.completed).length;
+      const slaRate = officeTasks.length ? (doneTasks / officeTasks.length) * 100 : 0;
+
+      return {
+        Office: office.name,
+        Country: office.country,
+        Lead: office.lead,
+        Agents: officeAgents.length,
+        Teams: new Set(officeAgents.map((agent) => agent.team)).size,
+        Tasks: officeTasks.length,
+        Completed: doneTasks,
+        Handovers: officeHandovers.length,
+        Blockers: officeBlockers.length,
+        Campaigns: officeCampaigns.length,
+        SLA: percent(slaRate),
+      };
+    }).filter((row) => Number(row.Tasks) > 0 || Number(row.Handovers) > 0 || Number(row.Campaigns) > 0);
+
+    const teamRows: DataRow[] = TEAMS.map((team) => {
+      const teamAgents = agents.filter((agent) => agent.team === team);
+      const teamNames = new Set(teamAgents.map((agent) => agent.name));
+      const teamTasks = tasks.filter((task) => teamNames.has(normalize(task.ownerId)));
+      const teamDone = teamTasks.filter((task) => task.completed).length;
+      const teamHandovers = handovers.filter(
+        (handover) =>
+          teamNames.has(normalize(handover.outgoingLead)) ||
+          teamNames.has(normalize(handover.incomingLead)) ||
+          normalize(handover.team) === team.replace(' Team', ''),
+      );
+      const teamBlockers = blockers.filter((blocker) => teamNames.has(normalize(blocker.ownerId)));
+      const teamCampaigns = campaigns.filter((campaign) => teamNames.has(normalize(campaign.currentOwner)));
+
+      return {
+        Team: team,
+        Agents: teamAgents.length,
+        Offices: new Set(teamAgents.map((agent) => agent.office)).size,
+        Tasks: teamTasks.length,
+        Completed: teamDone,
+        Pending: teamTasks.length - teamDone,
+        Handovers: teamHandovers.length,
+        Blockers: teamBlockers.length,
+        Campaigns: teamCampaigns.length,
+        Productivity: percent(teamTasks.length ? (teamDone / teamTasks.length) * 100 : 0),
+      };
+    }).filter((row) => Number(row.Agents) > 0 || Number(row.Tasks) > 0);
+
+    const agentRows: DataRow[] = agents.map((agent) => {
+      const agentTasks = tasksByOwner[agent.name] || [];
+      const done = agentTasks.filter((task) => task.completed).length;
+      const pending = agentTasks.length - done;
+      const agentHandoversOut = handoversByOutgoing[agent.name] || [];
+      const agentHandoversIn = handovers.filter((handover) => normalize(handover.incomingLead) === agent.name);
+      const agentBlockers = blockersByOwner[agent.name] || [];
+      const agentCampaigns = campaignsByOwner[agent.name] || [];
+      const productivityScore = done * 10 + agentHandoversOut.length * 5 - agentBlockers.length * 4;
+
+      return {
+        Agent: agent.name,
+        Team: agent.team,
+        Office: agent.office,
+        Role: agent.role,
+        Tasks: agentTasks.length,
+        Done: done,
+        Pending: pending,
+        HandoversOut: agentHandoversOut.length,
+        HandoversIn: agentHandoversIn.length,
+        Blockers: agentBlockers.length,
+        Campaigns: agentCampaigns.length,
+        Score: productivityScore,
+      };
+    }).filter((row) => Number(row.Tasks) > 0 || Number(row.HandoversOut) > 0 || Number(row.Campaigns) > 0);
+
+    const taskRows: DataRow[] = tasks.map((task) => ({
+      Task: task.title,
+      Owner: normalize(task.ownerId),
+      Campaign: normalize(task.campaignId),
+      Priority: task.priority,
+      Status: task.completed ? 'Completed' : isOverdue(task.dueDate, task.completed) ? 'Overdue' : isDueSoon(task.dueDate, task.completed) ? 'Due Soon' : 'Open',
+      DueDate: formatDueDate(task.dueDate),
+      AgeDays: Math.max(0, Math.floor((Date.now() - task.createdAt) / (1000 * 60 * 60 * 24))),
+    }));
+
+    const handoverRows: DataRow[] = handovers.map((handover) => ({
+      Date: handover.handoffDate,
+      Team: handover.team,
+      Region: handover.region,
+      From: handover.outgoingLead,
+      To: handover.incomingLead,
+      Status: handover.status,
+      LinkedTasks: handover.taskIds.length,
+      NotesSize: handover.notes.length,
+    }));
+
+    const blockerRows: DataRow[] = blockers.map((blocker) => ({
+      Blocker: blocker.summary,
+      Owner: normalize(blocker.ownerId),
+      Severity: blocker.severity,
+      Status: blocker.status,
+      Campaign: normalize(blocker.campaignId),
+      AgeDays: Math.max(0, Math.floor((Date.now() - blocker.createdAt) / (1000 * 60 * 60 * 24))),
+      Impact: blocker.impact,
+    }));
+
+    const campaignRows: DataRow[] = campaigns.map((campaign) => ({
+      Campaign: campaign.name,
+      Owner: campaign.currentOwner,
+      Market: `${campaign.country} / ${campaign.city}`,
+      Status: campaign.status,
+      Health: campaign.recordHealth,
+      Budget: campaign.budget,
+      Targets: campaign.targetInfluencers,
+      CoverageTarget: campaign.targetPostingCoverage,
+      Platforms: campaign.platforms.join(', '),
+    }));
+
+    const slaOwnerRows: DataRow[] = agents.map((agent) => {
+      const agentTasks = tasksByOwner[agent.name] || [];
+      const total = agentTasks.length;
+      const completed = agentTasks.filter((task) => task.completed).length;
+      const overdue = agentTasks.filter((task) => isOverdue(task.dueDate, task.completed)).length;
+      const dueSoon = agentTasks.filter((task) => isDueSoon(task.dueDate, task.completed)).length;
+      const complianceRate = total ? ((total - overdue) / total) * 100 : 100;
+
+      return {
+        Owner: agent.name,
+        Team: agent.team,
+        TotalTasks: total,
+        Completed: completed,
+        DueSoon: dueSoon,
+        Overdue: overdue,
+        Compliance: percent(complianceRate),
+      };
+    }).filter((row) => Number(row.TotalTasks) > 0);
+
+    const doneTasks = tasks.filter((task) => task.completed).length;
+    const overdueTasks = tasks.filter((task) => isOverdue(task.dueDate, task.completed)).length;
+    const acknowledgedHandovers = handovers.filter((handover) => handover.status !== 'Pending').length;
+    const totalBudget = campaigns.reduce((sum, campaign) => sum + campaign.budget, 0);
+
+    const reportMap: Record<PillarKey, PillarReport> = {
+      offices: {
+        key: 'offices',
+        label: 'Offices',
+        description: 'Regional office throughput, staffing spread, and SLA posture.',
+        value: String(officeRows.length),
+        insight: `${officeRows.reduce((sum, row) => sum + Number(row.Tasks || 0), 0)} tracked tasks across all active offices`,
+        rows: officeRows,
+      },
+      teams: {
+        key: 'teams',
+        label: 'Teams',
+        description: 'Team-level execution, load, and backlog visibility.',
+        value: String(teamRows.length),
+        insight: `${teamRows.reduce((sum, row) => sum + Number(row.Completed || 0), 0)} completed tasks delivered by active teams`,
+        rows: teamRows,
+      },
+      agents: {
+        key: 'agents',
+        label: 'Agents',
+        description: 'Individual productivity, ownership, and handover responsibility.',
+        value: String(agentRows.length),
+        insight: `${agentRows.filter((row) => Number(row.Score || 0) > 0).length} agents currently driving positive output`,
+        rows: agentRows,
+      },
+      tasks: {
+        key: 'tasks',
+        label: 'Tasks',
+        description: 'Detailed task flow with owner, status, and due-date pressure.',
+        value: String(tasks.length),
+        insight: `${doneTasks} done / ${tasks.length - doneTasks} still open`,
+        rows: taskRows,
+      },
+      handovers: {
+        key: 'handovers',
+        label: 'Handovers',
+        description: 'Shift relay continuity, acknowledgement, and linked workload.',
+        value: String(handovers.length),
+        insight: `${acknowledgedHandovers} acknowledged or reviewed relays`,
+        rows: handoverRows,
+      },
+      sla: {
+        key: 'sla',
+        label: 'SLA',
+        description: 'Compliance pressure by owner using due dates and backlog heat.',
+        value: percent(tasks.length ? ((tasks.length - overdueTasks) / tasks.length) * 100 : 100),
+        insight: `${overdueTasks} overdue tasks currently threatening SLA`,
+        rows: slaOwnerRows,
+      },
+      blockers: {
+        key: 'blockers',
+        label: 'Blockers',
+        description: 'Open risk inventory with severity, age, and ownership.',
+        value: String(blockers.length),
+        insight: `${blockers.filter((blocker) => blocker.severity === 'Critical').length} critical blockers require immediate attention`,
+        rows: blockerRows,
+      },
+      campaigns: {
+        key: 'campaigns',
+        label: 'Campaigns',
+        description: 'Portfolio health, ownership mix, and budget exposure.',
+        value: String(campaigns.length),
+        insight: `${currency(totalBudget)} in tracked campaign budget`,
+        rows: campaignRows,
+      },
+    };
+
+    return reportMap;
+  }, [role]);
+
+  const selectedReport = reports[selectedPillar];
+  const filteredRows = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase();
+    if (!query) return selectedReport.rows;
+    return selectedReport.rows.filter((row) =>
+      Object.values(row).some((value) => String(value).toLowerCase().includes(query)),
+    );
+  }, [searchTerm, selectedReport.rows]);
+
+  const chart = useMemo(() => {
+    const rows = filteredRows.slice(0, 6);
+    if (!rows.length) return { labelKey: '', valueKey: '', rows: [] as Array<Record<string, string | number>> };
+
+    const firstRow = rows[0];
+    const keys = Object.keys(firstRow);
+    const labelKey = keys.find((key) => typeof firstRow[key] === 'string') || keys[0];
+    const valueKey = keys.find((key) => typeof firstRow[key] === 'number') || keys[1] || keys[0];
+
+    return { labelKey, valueKey, rows };
+  }, [filteredRows]);
+
+  const tableColumns = filteredRows[0] ? Object.keys(filteredRows[0]) : [];
+  const globalSheets = Object.values(reports).map((report) => ({
+    name: toTitle(report.label),
+    rows: report.rows,
+  }));
+
+  const exportCurrentXlsx = () => exportRows(`trygc_${selectedPillar}_report.xlsx`, selectedReport.rows);
+  const exportCurrentCsv = () => exportRowsAsCsv(`trygc_${selectedPillar}_report.csv`, selectedReport.rows);
+  const exportAllWorkbook = () => exportWorkbook('trygc_reporting_hub.xlsx', globalSheets);
+
+  const totalTasks = Number(reports.tasks.value || 0);
+  const totalHandovers = Number(reports.handovers.value || 0);
+  const totalBlockers = Number(reports.blockers.value || 0);
+  const totalCampaigns = Number(reports.campaigns.value || 0);
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <div>
-          <h1 className="font-condensed text-[24px] font-extrabold tracking-tight uppercase">Client Reporting</h1>
-          <p className="text-[11px] text-muted-foreground mt-0.5">Generate and manage performance reports for all campaigns.</p>
+          <p className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-gc-orange">Reporting Center</p>
+          <h1 className="font-condensed text-[28px] font-extrabold uppercase tracking-tight">Pillar Analytics Hub</h1>
+          <p className="mt-1 max-w-3xl text-[12px] font-medium text-muted-foreground">
+            Drill into every operational pillar, click across live metrics, and export both Excel and CSV reports from the same command surface.
+          </p>
         </div>
-        <Button onClick={handleExportAll} className="bg-gc-orange text-white hover:bg-gc-orange/90 h-9 font-condensed font-bold tracking-wider">
-          <Download className="h-4 w-4 mr-2" />
-          Export All Data
-        </Button>
+
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={exportAllWorkbook} className="h-10 bg-gc-orange text-white hover:bg-gc-orange/90">
+            <FileSpreadsheet className="mr-2 h-4 w-4" />
+            Export Full Workbook
+          </Button>
+          <Button variant="outline" onClick={exportCurrentXlsx} className="h-10">
+            <Download className="mr-2 h-4 w-4" />
+            Export {selectedReport.label} XLSX
+          </Button>
+          <Button variant="outline" onClick={exportCurrentCsv} className="h-10">
+            <Download className="mr-2 h-4 w-4" />
+            Export {selectedReport.label} CSV
+          </Button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <MetricCard label="Active Campaigns" value={activeCampaigns.length} tone="orange" />
-        <MetricCard label="Completed Campaigns" value={completedCampaigns.length} tone="green" />
-        <MetricCard label="Blocked Campaigns" value={blockedCampaigns.length} tone="red" />
-        <MetricCard label="Tracked Budget" value={`$${totalBudget.toLocaleString()}`} tone="purple" />
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+        <SummaryCard label="Tasks Tracked" value={String(totalTasks)} tone="text-gc-orange" />
+        <SummaryCard label="Handovers Live" value={String(totalHandovers)} tone="text-indigo-500" />
+        <SummaryCard label="Open Blockers" value={String(totalBlockers)} tone="text-red-500" />
+        <SummaryCard label="Campaigns Active" value={String(totalCampaigns)} tone="text-sky-500" />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card className="bg-card border-border md:col-span-2">
-          <CardHeader>
-            <CardTitle className="text-[11px] font-bold uppercase tracking-wider font-condensed flex items-center gap-2 text-muted-foreground">
-              <BarChart3 className="h-3.5 w-3.5" />
-              Campaign Status Distribution
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="h-[200px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                <XAxis
-                  dataKey="name"
-                  stroke="var(--muted-foreground)"
-                  fontSize={10}
-                  tickLine={false}
-                  axisLine={false}
-                  fontFamily="JetBrains Mono"
-                />
-                <YAxis
-                  stroke="var(--muted-foreground)"
-                  fontSize={10}
-                  tickLine={false}
-                  axisLine={false}
-                  fontFamily="JetBrains Mono"
-                />
-                <Tooltip
-                  contentStyle={{ backgroundColor: 'var(--card)', border: '1px solid var(--border)', borderRadius: '8px' }}
-                  itemStyle={{ color: 'var(--foreground)', fontSize: '11px', fontFamily: 'JetBrains Mono' }}
-                />
-                <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                  {chartData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {PILLAR_META.map((pillar) => {
+          const report = reports[pillar.key];
+          const Icon = pillar.icon;
+          const isActive = selectedPillar === pillar.key;
 
-        <Card className="bg-card border-border">
-          <CardHeader>
-            <CardTitle className="text-[11px] font-bold uppercase tracking-wider font-condensed flex items-center gap-2 text-muted-foreground">
-              <PieChartIcon className="h-3.5 w-3.5" />
-              Quick Stats
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex justify-between items-center p-2 rounded-md bg-secondary/50">
-              <span className="text-[10px] text-muted-foreground font-bold uppercase font-condensed">Total Campaigns</span>
-              <span className="text-[13px] font-mono font-bold">{campaigns.length}</span>
-            </div>
-            <div className="flex justify-between items-center p-2 rounded-md bg-secondary/50">
-              <span className="text-[10px] text-muted-foreground font-bold uppercase font-condensed">Avg. Coverage Rate</span>
-              <span className="text-[13px] font-mono font-bold text-emerald-500">92%</span>
-            </div>
-            <div className="flex justify-between items-center p-2 rounded-md bg-secondary/50">
-              <span className="text-[10px] text-muted-foreground font-bold uppercase font-condensed">SLA Compliance</span>
-              <span className="text-[13px] font-mono font-bold text-gc-orange">88%</span>
-            </div>
-            <div className="space-y-2 pt-2">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Top Markets</p>
-              {marketInsights.slice(0, 3).map((market) => (
-                <div key={market.name} className="flex items-center justify-between rounded-md border border-border bg-background px-2.5 py-1.5">
-                  <span className="text-[11px] font-bold text-foreground">{market.name}</span>
-                  <span className="text-[11px] font-mono text-muted-foreground">{market.value}</span>
+          return (
+            <button
+              key={pillar.key}
+              onClick={() => setSelectedPillar(pillar.key)}
+              className={`rounded-2xl border p-4 text-left transition-all ${
+                isActive
+                  ? 'border-gc-orange bg-gc-orange/8 shadow-[0_0_0_1px_rgba(249,115,22,0.15)]'
+                  : 'border-border bg-card hover:border-gc-orange/40 hover:bg-secondary/30'
+              }`}
+            >
+              <div className="mb-3 flex items-start justify-between gap-3">
+                <div
+                  className="flex h-10 w-10 items-center justify-center rounded-xl"
+                  style={{ backgroundColor: `${pillar.tone}18`, color: pillar.tone }}
+                >
+                  <Icon className="h-5 w-5" />
                 </div>
-              ))}
+                <Badge variant="outline" className="text-[10px] uppercase tracking-wider">
+                  Click
+                </Badge>
+              </div>
+              <div>
+                <p className="font-condensed text-[18px] font-extrabold uppercase tracking-tight">{report.label}</p>
+                <p className="mt-1 text-[12px] font-semibold text-muted-foreground">{report.description}</p>
+                <div className="mt-4 flex items-end justify-between gap-3">
+                  <span className="font-condensed text-[28px] font-black leading-none">{report.value}</span>
+                  <span className="text-right text-[11px] font-bold text-muted-foreground">{report.insight}</span>
+                </div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+        <Card className="border-border bg-card">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 font-condensed text-[18px] font-extrabold uppercase tracking-tight">
+              <BarChart3 className="h-4 w-4 text-gc-orange" />
+              {selectedReport.label} Performance Spread
+            </CardTitle>
+            <CardDescription>{selectedReport.description}</CardDescription>
+          </CardHeader>
+          <CardContent className="h-[300px]">
+            {chart.rows.length ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chart.rows}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                  <XAxis
+                    dataKey={chart.labelKey}
+                    stroke="var(--muted-foreground)"
+                    fontSize={10}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <YAxis stroke="var(--muted-foreground)" fontSize={10} tickLine={false} axisLine={false} />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: 'var(--card)',
+                      border: '1px solid var(--border)',
+                      borderRadius: '12px',
+                    }}
+                  />
+                  <Bar dataKey={chart.valueKey} radius={[8, 8, 0, 0]}>
+                    {chart.rows.map((_, index) => (
+                      <Cell key={index} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                No chartable data available for this pillar yet.
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="border-border bg-card">
+          <CardHeader>
+            <CardTitle className="font-condensed text-[18px] font-extrabold uppercase tracking-tight">
+              {selectedReport.label} Intelligence
+            </CardTitle>
+            <CardDescription>Fast operational reading for the currently selected reporting pillar.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <InsightRow label="Selected Pillar" value={selectedReport.label} />
+            <InsightRow label="Rows Available" value={String(selectedReport.rows.length)} />
+            <InsightRow label="Filtered Rows" value={String(filteredRows.length)} />
+            <InsightRow label="Key Insight" value={selectedReport.insight} />
+            <InsightRow label="Export Modes" value="XLSX + CSV" />
+            <div className="rounded-xl border border-dashed border-gc-orange/30 bg-gc-orange/5 p-4">
+              <p className="text-[11px] font-extrabold uppercase tracking-widest text-gc-orange">Analysis Note</p>
+              <p className="mt-2 text-[12px] font-medium leading-relaxed text-muted-foreground">
+                Click any pillar card to reframe the report instantly. Each pillar now has its own table, chart, and dedicated export path.
+              </p>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      <div className="rounded-lg border border-border bg-card p-4">
-        <div className="relative max-w-md">
-          <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            className="pl-9"
-            placeholder="Search campaign, client, brand, market..."
-            value={searchTerm}
-            onChange={(event) => setSearchTerm(event.target.value)}
-          />
-        </div>
-      </div>
+      <Card className="border-border bg-card">
+        <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <CardTitle className="font-condensed text-[20px] font-extrabold uppercase tracking-tight">
+              {selectedReport.label} Detailed Analysis
+            </CardTitle>
+            <CardDescription>
+              Search, click through, and export the exact rows behind the selected pillar.
+            </CardDescription>
+          </div>
 
-      <div className="rounded-lg border border-border bg-card overflow-hidden">
-        <Table>
-          <TableHeader className="bg-secondary/50">
-            <TableRow className="border-border hover:bg-transparent">
-              <TableHead className="text-muted-foreground/60 font-condensed text-[10px] uppercase tracking-[1px] py-3">Campaign</TableHead>
-              <TableHead className="text-muted-foreground/60 font-condensed text-[10px] uppercase tracking-[1px] py-3">Client / Brand</TableHead>
-              <TableHead className="text-muted-foreground/60 font-condensed text-[10px] uppercase tracking-[1px] py-3">Coverage</TableHead>
-              <TableHead className="text-muted-foreground/60 font-condensed text-[10px] uppercase tracking-[1px] py-3">Report Status</TableHead>
-              <TableHead className="text-right font-condensed text-[10px] uppercase tracking-[1px] py-3">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filteredCampaigns.map((campaign) => (
-              <TableRow key={campaign.id} className="border-border hover:bg-secondary/30 transition-colors group">
-                <TableCell>
-                  <span className="font-bold text-[12.5px] font-condensed">{campaign.name}</span>
-                </TableCell>
-                <TableCell>
-                  <div className="flex flex-col">
-                    <span className="text-[11.5px] font-medium">{campaign.clientId}</span>
-                    <span className="text-[10px] text-muted-foreground font-mono tracking-tight">{campaign.brandId}</span>
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-2">
-                    <div className="w-16 h-1.25 bg-border rounded-full overflow-hidden">
-                      <div className="h-full bg-emerald-500 w-[75%]" />
-                    </div>
-                    <span className="text-[10px] text-muted-foreground font-mono">75%</span>
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <Badge variant="outline" className="text-[9px] font-bold uppercase font-condensed border-border text-muted-foreground bg-secondary">
-                    {campaign.stage === 18 ? 'Complete' : campaign.blockerStatus ? 'Blocked' : 'Ready'}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-right">
-                  <Button variant="ghost" size="sm" className="h-8 text-muted-foreground hover:text-foreground hover:bg-accent font-condensed font-bold uppercase tracking-wider">
-                    <FileText className="h-4 w-4 mr-2" />
-                    Generate
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
+          <div className="relative w-full max-w-md">
+            <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              className="pl-9"
+              placeholder={`Search ${selectedReport.label.toLowerCase()} report...`}
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+            />
+          </div>
+        </CardHeader>
+        <CardContent>
+          {filteredRows.length ? (
+            <div className="overflow-x-auto rounded-xl border border-border">
+              <Table>
+                <TableHeader className="bg-secondary/50">
+                  <TableRow className="border-border hover:bg-transparent">
+                    {tableColumns.map((column) => (
+                      <TableHead key={column} className="py-3 text-[10px] font-extrabold uppercase tracking-[0.12em] text-muted-foreground">
+                        {column}
+                      </TableHead>
+                    ))}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredRows.map((row, index) => (
+                    <TableRow key={`${selectedPillar}-${index}`} className="border-border hover:bg-secondary/30">
+                      {tableColumns.map((column) => (
+                        <TableCell key={`${selectedPillar}-${index}-${column}`} className="text-[12px] font-medium">
+                          {String(row[column])}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          ) : (
+            <div className="flex min-h-[180px] items-center justify-center rounded-xl border border-dashed border-border text-sm text-muted-foreground">
+              No matching rows found for this search.
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
 
-function MetricCard({ label, value, tone }: { label: string; value: string | number; tone: 'orange' | 'green' | 'red' | 'purple' }) {
-  const tones = {
-    orange: 'text-gc-orange',
-    green: 'text-emerald-600',
-    red: 'text-red-600',
-    purple: 'text-purple-600',
-  };
+function SummaryCard({ label, value, tone }: { label: string; value: string; tone: string }) {
   return (
-    <Card className="bg-card border-border">
+    <Card className="border-border bg-card">
       <CardContent className="p-4">
-        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{label}</p>
-        <p className={`mt-1 text-2xl font-black ${tones[tone]}`}>{value}</p>
+        <p className="text-[10px] font-extrabold uppercase tracking-widest text-muted-foreground">{label}</p>
+        <p className={`mt-2 font-condensed text-[30px] font-black leading-none ${tone}`}>{value}</p>
       </CardContent>
     </Card>
+  );
+}
+
+function InsightRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-start justify-between gap-4 rounded-xl border border-border bg-background px-3 py-2.5">
+      <span className="text-[10px] font-extrabold uppercase tracking-widest text-muted-foreground">{label}</span>
+      <span className="text-right text-[12px] font-semibold text-foreground">{value}</span>
+    </div>
   );
 }

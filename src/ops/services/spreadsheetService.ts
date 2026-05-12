@@ -145,6 +145,50 @@ export async function exportRows(filename: string, rows: Row[]) {
   }
 }
 
+export function exportRowsAsCsv(filename: string, rows: Row[]) {
+  const csv = toCsv(rows);
+  downloadBlob(filename, new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+}
+
+export async function exportWorkbook(
+  filename: string,
+  sheets: Array<{ name: string; rows: Row[] }>
+) {
+  try {
+    const ExcelJS = await import('exceljs');
+    const workbook = new ExcelJS.Workbook();
+
+    sheets.forEach((sheet) => {
+      const worksheet = workbook.addWorksheet(sheet.name.slice(0, 31) || 'Export');
+      const headers = Array.from(new Set(sheet.rows.flatMap((row) => Object.keys(row))));
+
+      worksheet.columns = headers.map((header) => ({
+        header,
+        key: header,
+        width: Math.max(14, header.length + 2),
+      }));
+
+      sheet.rows.forEach((row) => worksheet.addRow(row));
+      worksheet.getRow(1).font = { bold: true };
+      worksheet.views = [{ state: 'frozen', ySplit: 1 }];
+    });
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    downloadBlob(
+      filename,
+      new Blob([buffer], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      }),
+    );
+  } catch (error) {
+    console.error('Workbook export failed, falling back to first sheet CSV', error);
+    const firstSheet = sheets[0];
+    if (firstSheet) {
+      exportRowsAsCsv(filename.replace(/\.(xlsx|xls)$/i, '.csv'), firstSheet.rows);
+    }
+  }
+}
+
 function parseCsv(csv: string): Row[] {
   const rows: string[][] = [];
   let current = '';

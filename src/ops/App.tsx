@@ -1,8 +1,9 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from './components/ui/sonner';
-import { localAuth, LocalAuthRole, LocalAuthUser } from './services/localAuth';
 import { canAccessPath, getHomePath } from './lib/access';
+import { supabaseAuth } from './services/supabaseAuth';
+import type { OpsRole, OpsUser } from './auth/types';
 
 import Dashboard from './pages/Dashboard';
 import Blockers from './pages/Blockers';
@@ -19,8 +20,8 @@ import Login from './pages/Login';
 import Layout from './components/Layout';
 
 interface AuthContextType {
-  user: LocalAuthUser | null;
-  role: LocalAuthRole | null;
+  user: OpsUser | null;
+  role: OpsRole | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -35,34 +36,41 @@ export function useAuth() {
 }
 
 export default function App() {
-  const [user, setUser] = useState<LocalAuthUser | null>(null);
-  const [role, setRole] = useState<LocalAuthRole | null>(null);
+  const [user, setUser] = useState<OpsUser | null>(null);
+  const [role, setRole] = useState<OpsRole | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let mounted = true;
 
-    localAuth.ensureDefaultUser().then(() => {
+    supabaseAuth.getSessionUser().then((sessionUser) => {
       if (!mounted) return;
-      const session = localAuth.getSession();
-      setUser(session);
-      setRole(session?.role || null);
+      setUser(sessionUser);
+      setRole(sessionUser?.role || null);
+      setLoading(false);
+    });
+
+    const subscription = supabaseAuth.onAuthStateChange((sessionUser) => {
+      if (!mounted) return;
+      setUser(sessionUser);
+      setRole(sessionUser?.role || null);
       setLoading(false);
     });
 
     return () => {
       mounted = false;
+      subscription.unsubscribe();
     };
   }, []);
 
   const login = async (email: string, password: string) => {
-    const signedInUser = await localAuth.signIn(email, password);
+    const signedInUser = await supabaseAuth.signIn(email, password);
     setUser(signedInUser);
     setRole(signedInUser.role);
   };
 
   const logout = async () => {
-    localAuth.signOut();
+    await supabaseAuth.signOut();
     setUser(null);
     setRole(null);
   };

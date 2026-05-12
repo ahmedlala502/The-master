@@ -27,8 +27,9 @@ import {
   Users,
 } from 'lucide-react';
 import { dataService } from '../services/dataService';
-import { localAuth, LocalAuthRole } from '../services/localAuth';
 import { useAuth } from '../App';
+import type { OpsRole } from '../auth/types';
+import { adminApi } from '../services/adminApi';
 
 type AdminRole = 'Master' | 'Operations' | 'Community';
 type AccessLevel = 'Full' | 'Scoped' | 'Read Only';
@@ -128,37 +129,50 @@ const normalizeAdminRole = (value: string | undefined): AdminRole => {
   return 'Operations';
 };
 
-const roleToLocalAuthRole = (role: AdminRole): LocalAuthRole => {
+const roleToOpsRole = (role: AdminRole): OpsRole => {
   if (role === 'Master') return 'master';
   if (role === 'Community') return 'community';
   return 'operations';
 };
 
-const mergeLocalAuthUsers = (directoryUsers: AdminUser[]) => {
-  const usersByEmail = new Map(
-    directoryUsers.map(user => [
-      user.email.toLowerCase(),
-      { ...user, role: normalizeAdminRole(user.role) },
-    ]),
-  );
-
-  localAuth.listUsers().forEach(localUser => {
-    const email = localUser.email.toLowerCase();
-    if (usersByEmail.has(email)) return;
-
-    usersByEmail.set(email, {
-      id: localUser.uid,
-      name: localUser.displayName,
-      email: localUser.email,
-      role: normalizeAdminRole(localUser.role === 'master' ? 'Master' : localUser.role === 'community' ? 'Community' : 'Operations'),
-      access: localUser.role === 'master' ? 'Full' : 'Scoped',
-      status: 'Active',
-      lastSeen: 'Local login',
-    });
-  });
-
-  return Array.from(usersByEmail.values());
+const opsRoleToAdminRole = (role: OpsRole): AdminRole => {
+  if (role === 'master') return 'Master';
+  if (role === 'community') return 'Community';
+  return 'Operations';
 };
+
+const formatLastSeen = (value?: string | null) => {
+  if (!value) return 'Never';
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return 'Unknown';
+
+  const diff = Date.now() - parsed.getTime();
+  const minutes = Math.max(0, Math.floor(diff / 60000));
+  if (minutes < 1) return 'Now';
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+};
+
+const mapApiUserToAdminUser = (user: {
+  uid: string;
+  email: string;
+  displayName: string;
+  role: OpsRole;
+  status: 'active' | 'suspended';
+  lastSignInAt?: string | null;
+}): AdminUser => ({
+  id: user.uid,
+  name: user.displayName,
+  email: user.email,
+  role: opsRoleToAdminRole(user.role),
+  access: user.role === 'master' ? 'Full' : 'Scoped',
+  status: user.status === 'suspended' ? 'Suspended' : 'Active',
+  lastSeen: formatLastSeen(user.lastSignInAt),
+});
 
 export default function Admin() {
   const { user: currentUser } = useAuth();
@@ -171,20 +185,17 @@ export default function Admin() {
   const [search, setSearch] = useState('');
   const [savedAt, setSavedAt] = useState('Ready');
   const [hydrated, setHydrated] = useState(false);
+  const [usersLoading, setUsersLoading] = useState(true);
 
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (!stored) {
-      setUsers(mergeLocalAuthUsers(defaultUsers));
       setHydrated(true);
       return;
     }
 
     try {
       const parsed = JSON.parse(stored);
-      if (Array.isArray(parsed.users)) {
-        setUsers(mergeLocalAuthUsers(parsed.users.map((user: AdminUser) => ({ ...user, role: normalizeAdminRole(user.role) }))));
-      }
       if (Array.isArray(parsed.policies)) {
         setPolicies(parsed.policies.map((policy: ModulePolicy) => ({ ...policy, owner: normalizeAdminRole(policy.owner) })));
       }
@@ -198,8 +209,31 @@ export default function Admin() {
 
   useEffect(() => {
     if (!hydrated) return;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ users, policies, flags }));
-  }, [flags, hydrated, policies, users]);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ policies, flags }));
+  }, [flags, hydrated, policies]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    adminApi.listUsers()
+      .then((apiUsers) => {
+        if (!mounted) return;
+        setUsers(apiUsers.map(mapApiUserToAdminUser));
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setUsers(defaultUsers);
+        setSavedAt('Admin API unavailable');
+      })
+      .finally(() => {
+        if (!mounted) return;
+        setUsersLoading(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const visibleUsers = useMemo(() => {
     const value = search.trim().toLowerCase();
@@ -213,9 +247,27 @@ export default function Admin() {
   const activeModules = policies.filter(policy => policy.enabled).length;
   const enabledFlags = flags.filter(flag => flag.enabled).length;
 
-  const updateUser = (id: string, patch: Partial<AdminUser>) => {
-    setUsers(prev => prev.map(user => (user.id === id ? { ...user, ...patch } : user)));
-    setSavedAt('Saved locally');
+  const updateUser = async (id: string, patch: Partial<AdminUser>) => {
+    const targetUser = users.find(user => user.id === id);
+    if (!targetUser) return;
+
+    const nextName = patch.name ?? targetUser.name;
+    const nextRole = patch.role ?? targetUser.role;
+    const nextStatus = patch.status ?? targetUser.status;
+
+    try {
+      const updated = await adminApi.updateUser({
+        id,
+        name: nextName,
+        role: roleToOpsRole(nextRole),
+        status: nextStatus === 'Suspended' ? 'suspended' : 'active',
+      });
+
+      setUsers(prev => prev.map(user => (user.id === id ? mapApiUserToAdminUser(updated) : user)));
+      setSavedAt('Supabase user updated');
+    } catch (error: any) {
+      setSavedAt(error.message || 'Unable to update user');
+    }
   };
 
   const updatePolicy = (id: string, patch: Partial<ModulePolicy>) => {
@@ -247,32 +299,19 @@ export default function Admin() {
     }
 
     try {
-      await localAuth.createUser({ name, email, password, role: roleToLocalAuthRole(newUser.role) });
-
-      setUsers(prev => {
-        const existing = prev.find(user => user.email.toLowerCase() === email);
-        if (existing) {
-          return prev.map(user => user.id === existing.id ? { ...user, name, email, role: newUser.role, access: newUser.access, status: 'Active', lastSeen: 'Never' } : user);
-        }
-
-        return [
-          {
-            id: `usr-${Date.now()}`,
-            name,
-            email,
-            role: newUser.role,
-            access: newUser.access,
-            status: 'Active',
-            lastSeen: 'Never',
-          },
-          ...prev,
-        ];
+      const createdUser = await adminApi.createUser({
+        name,
+        email,
+        password,
+        role: roleToOpsRole(newUser.role),
       });
 
+      setUsers(prev => [mapApiUserToAdminUser(createdUser), ...prev.filter(user => user.email.toLowerCase() !== email)]);
+
       setNewUser({ name: '', email: '', password: '', role: 'Operations', access: 'Scoped' });
-      setSavedAt('Local user created');
+      setSavedAt('Supabase user created');
     } catch (error: any) {
-      setUserCreateError(error.message || 'Unable to create local user.');
+      setUserCreateError(error.message || 'Unable to create Supabase user.');
     }
   };
 
@@ -283,12 +322,17 @@ export default function Admin() {
       return;
     }
 
-    const confirmed = window.confirm(`Remove ${targetUser.name} (${targetUser.email})? This removes the Admin directory row and any matching local password login.`);
+    const confirmed = window.confirm(`Remove ${targetUser.name} (${targetUser.email})? This removes the Supabase account and access profile.`);
     if (!confirmed) return;
 
-    localAuth.removeUser(targetUser.email);
-    setUsers(prev => prev.filter(user => user.id !== targetUser.id));
-    setSavedAt('User removed');
+    adminApi.deleteUser(targetUser.id)
+      .then(() => {
+        setUsers(prev => prev.filter(user => user.id !== targetUser.id));
+        setSavedAt('Supabase user removed');
+      })
+      .catch((error: any) => {
+        setSavedAt(error.message || 'Unable to remove user');
+      });
   };
 
   const refreshDataCounts = () => setDataCounts(getDataCounts());
@@ -315,7 +359,6 @@ export default function Admin() {
   };
 
   const resetDefaults = () => {
-    setUsers(defaultUsers);
     setPolicies(defaultPolicies);
     setFlags(defaultFlags);
     setSavedAt('Defaults restored');
@@ -373,7 +416,7 @@ export default function Admin() {
             <form onSubmit={createUser} className="border-b border-border bg-muted/20 p-5">
               <div className="mb-4 flex items-center justify-between gap-4">
                 <div>
-                  <p className="text-[10px] font-extrabold uppercase tracking-widest text-gc-orange">Local User Login</p>
+                  <p className="text-[10px] font-extrabold uppercase tracking-widest text-gc-orange">Supabase Auth</p>
                   <h4 className="font-condensed font-extrabold text-[16px] text-foreground">Create User With Password</h4>
                 </div>
                 <Users size={17} className="text-muted-foreground" />
@@ -423,7 +466,9 @@ export default function Admin() {
             </form>
 
             <div className="divide-y divide-border">
-              {visibleUsers.map(user => (
+                  {usersLoading ? (
+                    <div className="p-5 text-[12px] font-semibold text-muted-foreground">Loading Supabase users...</div>
+                  ) : visibleUsers.map(user => (
                 <div key={user.id} className="p-5 grid grid-cols-1 lg:grid-cols-[1.1fr_0.85fr_0.75fr_auto_auto] gap-4 items-center">
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="h-11 w-11 rounded-lg bg-gc-orange/10 text-gc-orange flex items-center justify-center font-condensed font-black text-[14px]">
@@ -438,19 +483,19 @@ export default function Admin() {
                   <div className="grid grid-cols-2 gap-2">
                     <Select
                       value={user.role}
-                      onChange={value => updateUser(user.id, { role: value as AdminRole })}
+                      onChange={value => { void updateUser(user.id, { role: value as AdminRole }); }}
                       options={['Master', 'Operations', 'Community']}
                     />
                     <Select
                       value={user.access}
-                      onChange={value => updateUser(user.id, { access: value as AccessLevel })}
+                      onChange={() => {}}
                       options={['Full', 'Scoped', 'Read Only']}
                     />
                   </div>
 
                   <div className="flex items-center gap-3">
                     <button
-                      onClick={() => updateUser(user.id, { status: user.status === 'Active' ? 'Suspended' : 'Active' })}
+                      onClick={() => { void updateUser(user.id, { status: user.status === 'Active' ? 'Suspended' : 'Active' }); }}
                       className={`h-9 px-3 rounded-lg border text-[10px] font-extrabold uppercase tracking-widest transition-colors ${
                         user.status === 'Active'
                           ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
@@ -463,7 +508,7 @@ export default function Admin() {
                   </div>
 
                   <button
-                    onClick={() => updateUser(user.id, { access: 'Full', status: 'Active' })}
+                    onClick={() => { void updateUser(user.id, { role: user.role, status: 'Active' }); }}
                     className="h-9 px-3 rounded-lg bg-secondary border border-border text-[10px] font-extrabold uppercase tracking-widest text-foreground hover:border-gc-orange hover:text-gc-orange transition-colors"
                   >
                     Full Access
