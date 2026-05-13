@@ -3,13 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Check,
   CheckSquare,
-  ChevronDown,
-  ChevronUp,
   Clock,
+  Flame,
   Plus,
   Save,
   Search,
@@ -24,449 +23,358 @@ import { dataService, TEAM_MEMBERS } from '../services/dataService';
 import { notify } from '../services/notificationService';
 import { Task } from '../types';
 
-// Owner options: real team members + any owners already in existing tasks
 const PRIORITIES: Task['priority'][] = ['Low', 'Medium', 'High', 'Critical'];
 const ONE_DAY = 86400000;
 
 const fallbackDueDate = () => Date.now() + ONE_DAY;
 
 const toValidDate = (value: unknown, fallback = fallbackDueDate()) => {
-  const timestamp = typeof value === 'number' ? value : Number(value);
-  const date = new Date(timestamp);
-  return isValid(date) ? date : new Date(fallback);
+  const ts = typeof value === 'number' ? value : Number(value);
+  const d = new Date(ts);
+  return isValid(d) ? d : new Date(fallback);
 };
 
-const toValidTimestamp = (value: unknown, fallback = fallbackDueDate()) => toValidDate(value, fallback).getTime();
+const toValidTimestamp = (value: unknown, fallback = fallbackDueDate()) =>
+  toValidDate(value, fallback).getTime();
 
-const formatDueDate = (value: unknown, dateFormat: string) => format(toValidDate(value), dateFormat);
+const fmt = (value: unknown, f: string) => format(toValidDate(value), f);
 
 const parseDateInput = (value: string, fallback: unknown) => {
   if (!value) return toValidTimestamp(fallback);
-  const timestamp = new Date(`${value}T12:00:00`).getTime();
-  return Number.isFinite(timestamp) ? timestamp : toValidTimestamp(fallback);
+  const ts = new Date(`${value}T12:00:00`).getTime();
+  return Number.isFinite(ts) ? ts : toValidTimestamp(fallback);
 };
 
-const isTaskOverdue = (task: Task) => !task.completed && isPast(toValidDate(task.dueDate));
+const isOverdue = (task: Task) => !task.completed && isPast(toValidDate(task.dueDate));
 
 const emptyDraft = (): Partial<Task> => ({
   title: '',
   description: '',
   ownerId: '',
-  campaignId: 'Generic Ops',
+  campaignId: '',
   priority: 'Medium',
   dueDate: fallbackDueDate(),
   completed: false,
 });
 
-const normalizeTaskDraft = (task: Task): Partial<Task> => ({
-  ...task,
-  ownerId: task.ownerId?.trim() || 'Sarah A.',
-  campaignId: task.campaignId?.trim() || 'Generic Ops',
-  dueDate: toValidTimestamp(task.dueDate),
-});
+// Priority visual config
+const PRIORITY_CONFIG: Record<string, { dot: string; badge: string }> = {
+  Critical: { dot: 'bg-red-500',    badge: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800' },
+  High:     { dot: 'bg-orange-500', badge: 'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-900/20 dark:text-orange-400 dark:border-orange-800' },
+  Medium:   { dot: 'bg-amber-500',  badge: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800' },
+  Low:      { dot: 'bg-green-500',  badge: 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800' },
+};
 
 export default function TasksCenter() {
   const { role } = useAuth();
   const [tasks, setTasks] = useState<Task[]>(filterTasksByRole(role, dataService.getTasks()));
-  const [draft, setDraft] = useState<Partial<Task>>(emptyDraft());
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<Partial<Task> | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+  const [createDraft, setCreateDraft] = useState<Partial<Task>>(emptyDraft());
   const [query, setQuery] = useState('');
   const [ownerFilter, setOwnerFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState<'active' | 'completed' | 'all'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'completed'>('all');
   const [priorityFilter, setPriorityFilter] = useState<'all' | Task['priority']>('all');
-  const [showCreate, setShowCreate] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [expandedDraft, setExpandedDraft] = useState<Partial<Task> | null>(null);
   const [supabaseUsers, setSupabaseUsers] = useState<string[]>([]);
 
   useEffect(() => {
-    let mounted = true;
+    let alive = true;
     import('../services/adminApi').then(({ adminApi }) => {
       adminApi.listUsers().then(users => {
-        if (mounted) setSupabaseUsers(users.filter(u => u.status === 'active').map(u => u.displayName));
+        if (alive) setSupabaseUsers(users.filter(u => u.status === 'active').map(u => u.displayName));
       }).catch(() => {});
     });
-    return () => { mounted = false; };
+    return () => { alive = false; };
   }, []);
 
   const campaigns = filterCampaignsByRole(role, dataService.getCampaigns());
+  const campaignOptions = campaigns.map(c => c.name);
   const owners = filterOwnerOptionsByRole(role, Array.from(new Set([
     ...TEAM_MEMBERS,
     ...supabaseUsers,
-    ...tasks.map((task) => task.ownerId?.trim()).filter(Boolean) as string[],
+    ...tasks.map(t => t.ownerId?.trim()).filter(Boolean) as string[],
   ])));
 
-  const filteredTasks = useMemo(() => {
+  const filtered = useMemo(() => {
+    const pw: Record<string, number> = { Critical: 4, High: 3, Medium: 2, Low: 1 };
     return tasks
-      .filter((task) => {
-        const ownerId = task.ownerId?.trim() || 'Unassigned';
-        const haystack = `${task.title || ''} ${task.description || ''} ${ownerId} ${task.campaignId || ''}`.toLowerCase();
-        const matchesQuery = !query || haystack.includes(query.toLowerCase());
-        const matchesOwner = ownerFilter === 'all' || ownerId === ownerFilter;
-        const matchesStatus = statusFilter === 'all' || (statusFilter === 'completed' ? task.completed : !task.completed);
-        const matchesPriority = priorityFilter === 'all' || task.priority === priorityFilter;
-        return matchesQuery && matchesOwner && matchesStatus && matchesPriority;
+      .filter(t => {
+        const owner = t.ownerId?.trim() || 'Unassigned';
+        const hay = `${t.title} ${t.description} ${owner} ${t.campaignId}`.toLowerCase();
+        return (
+          (!query || hay.includes(query.toLowerCase())) &&
+          (ownerFilter === 'all' || owner === ownerFilter) &&
+          (statusFilter === 'all' || (statusFilter === 'completed' ? t.completed : !t.completed)) &&
+          (priorityFilter === 'all' || t.priority === priorityFilter)
+        );
       })
       .sort((a, b) => {
-        const priorityWeight = { Critical: 4, High: 3, Medium: 2, Low: 1 };
         if (a.completed !== b.completed) return a.completed ? 1 : -1;
-        if (priorityWeight[b.priority] !== priorityWeight[a.priority]) return priorityWeight[b.priority] - priorityWeight[a.priority];
+        if (pw[b.priority] !== pw[a.priority]) return pw[b.priority] - pw[a.priority];
         return toValidTimestamp(a.dueDate) - toValidTimestamp(b.dueDate);
       });
   }, [tasks, query, ownerFilter, statusFilter, priorityFilter]);
 
-  const saveTask = () => {
-    if (!draft.title?.trim()) return;
-
-    const task: Task = {
-      id: `TSK-${Date.now()}`,
-      title: draft.title || '',
-      description: draft.description || '',
-      ownerId: draft.ownerId?.trim() || 'Ops',
-      campaignId: draft.campaignId?.trim() || 'Generic Ops',
-      priority: draft.priority || 'Medium',
-      dueDate: toValidTimestamp(draft.dueDate),
-      completed: Boolean(draft.completed),
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      createdBy: 'admin',
-    };
-
-    setTasks(dataService.addTask(task));
-    notify('Task Created', `"${task.title}" assigned to ${task.ownerId}`, 'green', '/tasks');
-    setShowCreate(false);
-    setDraft(emptyDraft());
-  };
-
-  const cancelCreate = () => {
-    setShowCreate(false);
-    setDraft(emptyDraft());
-  };
-
-  const openTask = (task: Task) => {
-    if (expandedId === task.id) {
-      setExpandedId(null);
-      setExpandedDraft(null);
-      return;
-    }
-
-    setExpandedId(task.id);
-    setExpandedDraft(normalizeTaskDraft(task));
+  // ── Inline save ──────────────────────────────────────────────────────────────
+  const startEdit = (task: Task) => {
+    setEditingId(task.id);
+    setEditDraft({ ...task, dueDate: toValidTimestamp(task.dueDate) });
     setConfirmDeleteId(null);
-    setShowCreate(false);
   };
 
-  const updateTask = (id: string, updates: Partial<Task>) => {
-    const current = tasks.find(task => task.id === id);
-    if (!current) return;
-
-    const nextTasks = filterTasksByRole(role, dataService.updateTask(id, { ...updates, updatedAt: Date.now() }));
-    setTasks(nextTasks);
-
-    if (expandedId === id) {
-      const latest = nextTasks.find(task => task.id === id);
-      if (latest) setExpandedDraft(normalizeTaskDraft(latest));
-    }
-
-    if (typeof updates.completed === 'boolean') {
-      notify(
-        updates.completed ? 'Task Checked Off' : 'Task Reopened',
-        `"${current.title}" ${updates.completed ? 'marked complete' : 'returned to active work'}`,
-        updates.completed ? 'green' : 'orange',
-        '/tasks',
-      );
-    }
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditDraft(null);
   };
 
-  const saveExpandedTask = () => {
-    if (!expandedId || !expandedDraft?.title?.trim()) return;
-
-    const nextTasks = filterTasksByRole(role, dataService.updateTask(expandedId, {
-      title: expandedDraft.title?.trim(),
-      description: expandedDraft.description || '',
-      ownerId: expandedDraft.ownerId?.trim() || 'Ops',
-      campaignId: expandedDraft.campaignId?.trim() || 'Generic Ops',
-      priority: expandedDraft.priority || 'Medium',
-      dueDate: toValidTimestamp(expandedDraft.dueDate),
-      completed: Boolean(expandedDraft.completed),
+  const saveEdit = () => {
+    if (!editingId || !editDraft?.title?.trim()) return;
+    const next = filterTasksByRole(role, dataService.updateTask(editingId, {
+      title: editDraft.title!.trim(),
+      description: editDraft.description || '',
+      ownerId: editDraft.ownerId?.trim() || '',
+      campaignId: editDraft.campaignId?.trim() || '',
+      priority: editDraft.priority || 'Medium',
+      dueDate: toValidTimestamp(editDraft.dueDate),
+      completed: Boolean(editDraft.completed),
       updatedAt: Date.now(),
     }));
+    setTasks(next);
+    const saved = next.find(t => t.id === editingId);
+    if (saved) notify('Task Updated', `"${saved.title}" saved`, 'orange', '/tasks');
+    setEditingId(null);
+    setEditDraft(null);
+  };
 
-    setTasks(nextTasks);
-    const savedTask = nextTasks.find(task => task.id === expandedId);
-    if (savedTask) {
-      setExpandedDraft(normalizeTaskDraft(savedTask));
-      notify('Task Updated', `"${savedTask.title}" was updated`, 'orange', '/tasks');
-    }
+  const toggleComplete = (task: Task) => {
+    const next = filterTasksByRole(role, dataService.updateTask(task.id, { completed: !task.completed, updatedAt: Date.now() }));
+    setTasks(next);
+    notify(
+      task.completed ? 'Task Reopened' : 'Task Completed',
+      `"${task.title}" ${task.completed ? 'returned to active' : 'marked complete'}`,
+      task.completed ? 'orange' : 'green',
+      '/tasks',
+    );
   };
 
   const deleteTask = (id: string) => {
     const task = tasks.find(t => t.id === id);
     setTasks(filterTasksByRole(role, dataService.deleteTask(id)));
-    if (task) notify('Task Deleted', `"${task.title}" removed from task board`, 'red', '/tasks');
-    if (expandedId === id) {
-      setExpandedId(null);
-      setExpandedDraft(null);
-    }
+    if (task) notify('Task Deleted', `"${task.title}" removed`, 'red', '/tasks');
+    if (editingId === id) cancelEdit();
     setConfirmDeleteId(null);
   };
 
-  const activeCount = tasks.filter((task) => !task.completed).length;
-  const overdueCount = tasks.filter(isTaskOverdue).length;
-  const completedCount = tasks.filter((task) => task.completed).length;
+  const saveCreate = () => {
+    if (!createDraft.title?.trim()) return;
+    const task: Task = {
+      id: `TSK-${Date.now()}`,
+      title: createDraft.title.trim(),
+      description: createDraft.description || '',
+      ownerId: createDraft.ownerId?.trim() || '',
+      campaignId: createDraft.campaignId?.trim() || '',
+      priority: createDraft.priority || 'Medium',
+      dueDate: toValidTimestamp(createDraft.dueDate),
+      completed: false,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      createdBy: 'admin',
+    };
+    setTasks(dataService.addTask(task));
+    notify('Task Created', `"${task.title}" added`, 'green', '/tasks');
+    setShowCreate(false);
+    setCreateDraft(emptyDraft());
+  };
+
+  const activeCount = tasks.filter(t => !t.completed).length;
+  const overdueCount = tasks.filter(isOverdue).length;
+  const completedCount = tasks.filter(t => t.completed).length;
 
   return (
-    <div className="max-w-[1240px] mx-auto space-y-6 pb-12 animate-in fade-in duration-500">
-      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+    <div className="max-w-[1360px] mx-auto space-y-6 pb-12 animate-in fade-in duration-500">
+      {/* Header */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <div className="text-[11px] font-bold uppercase tracking-[1.5px] text-gc-orange">Core Operations</div>
           <h2 className="font-extrabold text-2xl tracking-tight text-foreground">Task Management</h2>
           <p className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
-            <CheckSquare size={16} className="text-gc-orange" />
-            Check tasks normally, expand them for details, and reassign or update them inline.
+            <CheckSquare size={15} className="text-gc-orange" />
+            Click a row to edit it inline — all fields are editable directly in the table.
           </p>
         </div>
         <button
-          onClick={() => {
-            setShowCreate(true);
-            setDraft(emptyDraft());
-            setExpandedId(null);
-            setExpandedDraft(null);
-          }}
-          className="inline-flex items-center gap-2 rounded-lg bg-gc-orange px-4 py-2 text-sm font-bold text-white hover:bg-gc-orange/90"
+          onClick={() => { setShowCreate(true); setCreateDraft(emptyDraft()); cancelEdit(); }}
+          className="inline-flex items-center gap-2 rounded-lg bg-gc-orange px-4 py-2 text-sm font-bold text-white hover:bg-gc-orange/90 shrink-0"
         >
-          <Plus size={16} />
-          New Task
+          <Plus size={16} /> New Task
         </button>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <TaskStat label="Active" value={activeCount} tone="orange" />
-        <TaskStat label="Overdue" value={overdueCount} tone="red" />
-        <TaskStat label="Completed" value={completedCount} tone="green" />
-        <TaskStat label="Owners" value={owners.length} tone="purple" />
+      {/* Stats */}
+      <div className="grid grid-cols-3 gap-4">
+        <StatCard label="Active" value={activeCount} color="text-gc-orange" />
+        <StatCard label="Overdue" value={overdueCount} color="text-red-600" />
+        <StatCard label="Completed" value={completedCount} color="text-green-600" />
       </div>
 
+      {/* Create form */}
       {showCreate && (
-        <TaskEditor
-          draft={draft}
-          setDraft={setDraft}
-          campaigns={campaigns.map((campaign) => `${campaign.id} - ${campaign.name}`)}
+        <CreateForm
+          draft={createDraft}
+          setDraft={setCreateDraft}
           owners={owners}
-          title="Create Task"
-          onSave={saveTask}
-          onCancel={cancelCreate}
+          campaignOptions={campaignOptions}
+          onSave={saveCreate}
+          onCancel={() => { setShowCreate(false); setCreateDraft(emptyDraft()); }}
         />
       )}
 
-      <div className="rounded-xl border border-border bg-card shadow-sm">
-        <div className="grid gap-3 border-b border-border bg-muted/30 p-4 md:grid-cols-[1fr_auto_auto_auto]">
-          <div className="relative">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <input
-              className="settings-input pl-9"
-              placeholder="Search task, owner, campaign..."
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-          </div>
-          <Select value={ownerFilter} onChange={setOwnerFilter} options={['all', ...owners]} />
-          <Select value={statusFilter} onChange={(value) => setStatusFilter(value as 'active' | 'completed' | 'all')} options={['all', 'active', 'completed']} />
-          <PrioritySelect value={priorityFilter} onChange={(value) => setPriorityFilter(value as 'all' | Task['priority'])} />
+      {/* Filter bar */}
+      <div className="flex flex-wrap gap-3 rounded-xl border border-border bg-muted/30 px-4 py-3">
+        <div className="relative flex-1 min-w-48">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+          <input
+            className="settings-input pl-9 w-full"
+            placeholder="Search tasks…"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+          />
+        </div>
+        <select className="settings-input min-w-40" value={ownerFilter} onChange={e => setOwnerFilter(e.target.value)}>
+          <option value="all">All assignees</option>
+          {owners.map(o => <option key={o} value={o}>{o}</option>)}
+        </select>
+        <select className="settings-input min-w-36" value={statusFilter} onChange={e => setStatusFilter(e.target.value as any)}>
+          <option value="all">All statuses</option>
+          <option value="active">Active</option>
+          <option value="completed">Completed</option>
+        </select>
+        <PrioritySelect value={priorityFilter} onChange={v => setPriorityFilter(v as any)} />
+      </div>
+
+      {/* Task table */}
+      <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+        {/* Table header */}
+        <div className="hidden md:grid grid-cols-[2rem_1fr_11rem_10rem_9rem_9rem_7rem] gap-x-4 items-center border-b border-border bg-muted/40 px-4 py-2.5 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+          <span />
+          <span>Task</span>
+          <span>Assignee</span>
+          <span>Campaign</span>
+          <span>Priority</span>
+          <span>Due Date</span>
+          <span>Status</span>
         </div>
 
         <div className="divide-y divide-border">
-          {filteredTasks.length === 0 ? (
-            <div className="px-5 py-10 text-center text-sm text-muted-foreground">
-              No tasks match these filters.
+          {filtered.length === 0 ? (
+            <div className="py-16 text-center text-sm text-muted-foreground">
+              {tasks.length === 0 ? 'No tasks yet — create your first task above.' : 'No tasks match these filters.'}
             </div>
           ) : (
-            filteredTasks.map((task) => {
-              const overdue = isTaskOverdue(task);
-              const ownerId = task.ownerId?.trim() || 'Unassigned';
-              const expanded = expandedId === task.id;
+            filtered.map(task => {
+              const editing = editingId === task.id;
+              const overdue = isOverdue(task);
+              const deleting = confirmDeleteId === task.id;
+
+              if (editing && editDraft) {
+                return (
+                  <EditRow
+                    key={task.id}
+                    draft={editDraft}
+                    setDraft={setEditDraft}
+                    owners={owners}
+                    campaignOptions={campaignOptions}
+                    onSave={saveEdit}
+                    onCancel={cancelEdit}
+                    onDelete={() => setConfirmDeleteId(task.id)}
+                    confirmDelete={deleting}
+                    onConfirmDelete={() => deleteTask(task.id)}
+                    onCancelDelete={() => setConfirmDeleteId(null)}
+                  />
+                );
+              }
 
               return (
-                <div key={task.id} className={cn('transition-colors', overdue && 'bg-red-50/50 dark:bg-red-900/10')}>
-                  <div className="flex flex-col gap-3 px-5 py-4 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="flex min-w-0 flex-1 items-start gap-3">
-                      <button
-                        type="button"
-                        onClick={() => updateTask(task.id, { completed: !task.completed })}
-                        className={cn(
-                          'mt-0.5 flex h-8 w-8 items-center justify-center rounded-lg border-2 shrink-0 transition-colors',
-                          task.completed ? 'border-green-600 bg-green-600 text-white' : 'border-border text-transparent hover:border-gc-orange'
-                        )}
-                        aria-label={task.completed ? 'Reopen task' : 'Complete task'}
-                      >
-                        <Check size={17} strokeWidth={3} />
-                      </button>
+                <div
+                  key={task.id}
+                  onClick={() => startEdit(task)}
+                  className={cn(
+                    'grid grid-cols-1 md:grid-cols-[2rem_1fr_11rem_10rem_9rem_9rem_7rem] gap-x-4 gap-y-2 items-center px-4 py-3.5 cursor-pointer transition-colors',
+                    'hover:bg-muted/40',
+                    task.completed && 'opacity-60',
+                    overdue && !task.completed && 'bg-red-50/50 dark:bg-red-950/20',
+                  )}
+                >
+                  {/* Checkbox */}
+                  <button
+                    type="button"
+                    onClick={e => { e.stopPropagation(); toggleComplete(task); }}
+                    className={cn(
+                      'flex h-6 w-6 shrink-0 items-center justify-center rounded border-2 transition-colors',
+                      task.completed
+                        ? 'border-green-600 bg-green-600 text-white'
+                        : 'border-border hover:border-gc-orange text-transparent',
+                    )}
+                    aria-label={task.completed ? 'Reopen' : 'Complete'}
+                  >
+                    <Check size={13} strokeWidth={3} />
+                  </button>
 
-                      <button type="button" onClick={() => openTask(task)} className="min-w-0 flex-1 text-left">
-                        <div className="flex flex-col gap-2 xl:flex-row xl:items-start xl:justify-between">
-                          <div className="min-w-0">
-                            <p className={cn('text-sm font-bold text-foreground', task.completed && 'line-through text-muted-foreground')}>
-                              {task.title}
-                            </p>
-                            <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-                              {task.description || 'No description'}
-                            </p>
-                          </div>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <TaskPill label={ownerId} tone="neutral" />
-                            <TaskPill label={task.priority} tone={priorityTone(task.priority)} />
-                            <TaskPill label={formatDueDate(task.dueDate, 'MMM dd, yyyy')} tone={overdue ? 'red' : 'neutral'} />
-                            <TaskPill label={task.completed ? 'Done' : 'Open'} tone={task.completed ? 'green' : 'orange'} />
-                          </div>
-                        </div>
-                      </button>
-                    </div>
-
-                    <div className="flex items-center justify-between gap-2 lg:justify-end">
-                      <span className="text-[11px] text-muted-foreground">{task.campaignId || 'Generic Ops'}</span>
-                      <button
-                        type="button"
-                        onClick={() => openTask(task)}
-                        className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-[11px] font-bold text-foreground hover:border-gc-orange hover:text-gc-orange"
-                      >
-                        {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                        {expanded ? 'Collapse' : 'Expand'}
-                      </button>
-                    </div>
+                  {/* Title + description */}
+                  <div className="min-w-0">
+                    <p className={cn('text-sm font-semibold text-foreground truncate', task.completed && 'line-through text-muted-foreground')}>
+                      {task.title}
+                    </p>
+                    {task.description && (
+                      <p className="mt-0.5 text-xs text-muted-foreground truncate">{task.description}</p>
+                    )}
                   </div>
 
-                  {expanded && expandedDraft && (
-                    <div className="border-t border-border bg-muted/20 px-5 py-5">
-                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                        <Field
-                          label="Title"
-                          value={expandedDraft.title || ''}
-                          onChange={(value) => setExpandedDraft((current) => ({ ...current!, title: value }))}
-                        />
-                        <label>
-                          <span className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Assignee</span>
-                          <input
-                            className="settings-input"
-                            list={`owner-options-${task.id}`}
-                            placeholder="Type or select..."
-                            value={expandedDraft.ownerId || ''}
-                            onChange={(event) => setExpandedDraft((current) => ({ ...current!, ownerId: event.target.value }))}
-                          />
-                          <datalist id={`owner-options-${task.id}`}>
-                            {owners.map((owner) => (
-                              <option key={owner} value={owner} />
-                            ))}
-                          </datalist>
-                        </label>
+                  {/* Assignee */}
+                  <div className="text-sm text-foreground truncate md:block">
+                    <span className="md:hidden text-[10px] font-bold uppercase text-muted-foreground mr-1">Assignee: </span>
+                    {task.ownerId || <span className="text-muted-foreground">—</span>}
+                  </div>
 
-                        <label>
-                          <span className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Campaign</span>
-                          <input
-                            className="settings-input"
-                            list={`campaign-options-${task.id}`}
-                            value={expandedDraft.campaignId || ''}
-                            onChange={(event) => setExpandedDraft((current) => ({ ...current!, campaignId: event.target.value }))}
-                          />
-                          <datalist id={`campaign-options-${task.id}`}>
-                            {campaigns.map((campaign) => (
-                              <option key={campaign.id} value={`${campaign.id} - ${campaign.name}`} />
-                            ))}
-                          </datalist>
-                        </label>
+                  {/* Campaign */}
+                  <div className="text-sm text-foreground truncate">
+                    <span className="md:hidden text-[10px] font-bold uppercase text-muted-foreground mr-1">Campaign: </span>
+                    {task.campaignId || <span className="text-muted-foreground">—</span>}
+                  </div>
 
-                        <label>
-                          <span className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Priority</span>
-                          <select
-                            className="settings-input"
-                            value={expandedDraft.priority || 'Medium'}
-                            onChange={(event) => setExpandedDraft((current) => ({ ...current!, priority: event.target.value as Task['priority'] }))}
-                          >
-                            {PRIORITIES.map((priority) => (
-                              <option key={priority} value={priority}>
-                                {priority}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
+                  {/* Priority */}
+                  <div>
+                    <span className={cn(
+                      'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-bold',
+                      PRIORITY_CONFIG[task.priority]?.badge,
+                    )}>
+                      <span className={cn('h-1.5 w-1.5 rounded-full', PRIORITY_CONFIG[task.priority]?.dot)} />
+                      {task.priority}
+                    </span>
+                  </div>
 
-                        <label>
-                          <span className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Due Date</span>
-                          <input
-                            className="settings-input"
-                            type="date"
-                            value={formatDueDate(expandedDraft.dueDate, 'yyyy-MM-dd')}
-                            onChange={(event) => setExpandedDraft((current) => ({ ...current!, dueDate: parseDateInput(event.target.value, current?.dueDate) }))}
-                          />
-                        </label>
+                  {/* Due date */}
+                  <div className={cn('text-sm', overdue && !task.completed ? 'text-red-600 font-semibold' : 'text-foreground')}>
+                    <span className="md:hidden text-[10px] font-bold uppercase text-muted-foreground mr-1">Due: </span>
+                    <span className="inline-flex items-center gap-1">
+                      {overdue && !task.completed && <Clock size={12} />}
+                      {fmt(task.dueDate, 'MMM d, yyyy')}
+                    </span>
+                  </div>
 
-                        <label>
-                          <span className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Status</span>
-                          <select
-                            className="settings-input"
-                            value={expandedDraft.completed ? 'completed' : 'active'}
-                            onChange={(event) => setExpandedDraft((current) => ({ ...current!, completed: event.target.value === 'completed' }))}
-                          >
-                            <option value="active">Active</option>
-                            <option value="completed">Completed</option>
-                          </select>
-                        </label>
-
-                        <label className="md:col-span-2">
-                          <span className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Description</span>
-                          <textarea
-                            className="settings-input min-h-24"
-                            value={expandedDraft.description || ''}
-                            onChange={(event) => setExpandedDraft((current) => ({ ...current!, description: event.target.value }))}
-                          />
-                        </label>
-                      </div>
-
-                      <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                          <span>ID: {task.id}</span>
-                          <span>Created by {task.createdBy}</span>
-                          <span>Updated {formatDueDate(task.updatedAt, 'MMM dd, yyyy')}</span>
-                        </div>
-
-                        <div className="flex flex-wrap items-center gap-2">
-                          {confirmDeleteId === task.id ? (
-                            <>
-                              <span className="text-[10px] font-bold text-destructive">Delete task?</span>
-                              <button onClick={() => deleteTask(task.id)} className="rounded-lg bg-destructive px-3 py-2 text-[11px] font-bold text-white hover:bg-destructive/90">
-                                Yes, delete
-                              </button>
-                              <button onClick={() => setConfirmDeleteId(null)} className="rounded-lg border border-border px-3 py-2 text-[11px] font-bold hover:bg-accent">
-                                Cancel
-                              </button>
-                            </>
-                          ) : (
-                            <>
-                              <button
-                                onClick={() => setExpandedDraft(normalizeTaskDraft(task))}
-                                className="rounded-lg border border-border px-3 py-2 text-[11px] font-bold hover:bg-accent"
-                              >
-                                Reset
-                              </button>
-                              <button
-                                onClick={() => setConfirmDeleteId(task.id)}
-                                className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[11px] font-bold text-red-700 hover:bg-red-100"
-                              >
-                                <Trash2 size={14} />
-                                Delete
-                              </button>
-                              <button
-                                onClick={saveExpandedTask}
-                                className="inline-flex items-center gap-2 rounded-lg bg-gc-orange px-4 py-2 text-[11px] font-bold text-white hover:bg-gc-orange/90"
-                              >
-                                <Save size={14} />
-                                Save Updates
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )}
+                  {/* Status */}
+                  <div>
+                    <span className={cn(
+                      'inline-flex rounded-full border px-2.5 py-0.5 text-[11px] font-bold',
+                      task.completed
+                        ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800'
+                        : 'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-900/20 dark:text-orange-400 dark:border-orange-800',
+                    )}>
+                      {task.completed ? 'Done' : 'Open'}
+                    </span>
+                  </div>
                 </div>
               );
             })
@@ -477,151 +385,290 @@ export default function TasksCenter() {
   );
 }
 
-function TaskEditor({ draft, setDraft, campaigns, owners, title, onSave, onCancel }: any) {
+// ── Edit row ─────────────────────────────────────────────────────────────────
+function EditRow({
+  draft, setDraft, owners, campaignOptions,
+  onSave, onCancel, onDelete,
+  confirmDelete, onConfirmDelete, onCancelDelete,
+}: {
+  draft: Partial<Task>;
+  setDraft: React.Dispatch<React.SetStateAction<Partial<Task> | null>>;
+  owners: string[];
+  campaignOptions: string[];
+  onSave: () => void;
+  onCancel: () => void;
+  onDelete: () => void;
+  confirmDelete: boolean;
+  onConfirmDelete: () => void;
+  onCancelDelete: () => void;
+}) {
+  const rowId = draft.id || 'edit';
   return (
-    <div className="rounded-xl border border-orange-100 bg-white p-5 shadow-sm dark:border-orange-900/30 dark:bg-card">
-      <div className="mb-4 flex items-center justify-between">
+    <div className="border-l-4 border-gc-orange bg-orange-50/40 dark:bg-orange-950/10">
+      {/* Top: editable fields grid */}
+      <div className="grid grid-cols-1 gap-3 px-4 py-4 md:grid-cols-[1fr_11rem_10rem_9rem_9rem_7rem]">
+        {/* Title */}
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Title</span>
+          <input
+            autoFocus
+            className="settings-input"
+            value={draft.title || ''}
+            onChange={e => setDraft(d => ({ ...d!, title: e.target.value }))}
+            onKeyDown={e => { if (e.key === 'Enter') onSave(); if (e.key === 'Escape') onCancel(); }}
+          />
+        </label>
+
+        {/* Assignee */}
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Assignee</span>
+          <input
+            className="settings-input"
+            list={`ow-${rowId}`}
+            placeholder="Type or pick…"
+            value={draft.ownerId || ''}
+            onChange={e => setDraft(d => ({ ...d!, ownerId: e.target.value }))}
+          />
+          <datalist id={`ow-${rowId}`}>
+            {owners.map(o => <option key={o} value={o} />)}
+          </datalist>
+        </label>
+
+        {/* Campaign */}
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Campaign</span>
+          <input
+            className="settings-input"
+            list={`cp-${rowId}`}
+            placeholder="Campaign name…"
+            value={draft.campaignId || ''}
+            onChange={e => setDraft(d => ({ ...d!, campaignId: e.target.value }))}
+          />
+          <datalist id={`cp-${rowId}`}>
+            {campaignOptions.map(c => <option key={c} value={c} />)}
+          </datalist>
+        </label>
+
+        {/* Priority */}
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Priority</span>
+          <select
+            className="settings-input"
+            value={draft.priority || 'Medium'}
+            onChange={e => setDraft(d => ({ ...d!, priority: e.target.value as Task['priority'] }))}
+          >
+            {(['Low', 'Medium', 'High', 'Critical'] as Task['priority'][]).map(p => (
+              <option key={p} value={p}>{p}</option>
+            ))}
+          </select>
+        </label>
+
+        {/* Due date */}
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Due Date</span>
+          <input
+            className="settings-input"
+            type="date"
+            value={fmt(draft.dueDate, 'yyyy-MM-dd')}
+            onChange={e => setDraft(d => ({ ...d!, dueDate: parseDateInput(e.target.value, d?.dueDate) }))}
+          />
+        </label>
+
+        {/* Status */}
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Status</span>
+          <select
+            className="settings-input"
+            value={draft.completed ? 'completed' : 'active'}
+            onChange={e => setDraft(d => ({ ...d!, completed: e.target.value === 'completed' }))}
+          >
+            <option value="active">Open</option>
+            <option value="completed">Done</option>
+          </select>
+        </label>
+      </div>
+
+      {/* Description */}
+      <div className="px-4 pb-3">
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Description</span>
+          <textarea
+            className="settings-input min-h-16 resize-none"
+            value={draft.description || ''}
+            onChange={e => setDraft(d => ({ ...d!, description: e.target.value }))}
+            rows={2}
+          />
+        </label>
+      </div>
+
+      {/* Action buttons */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-orange-100 dark:border-orange-900/30 px-4 py-3">
+        <div className="flex flex-wrap items-center gap-2">
+          {confirmDelete ? (
+            <>
+              <span className="text-xs font-bold text-destructive">Delete this task?</span>
+              <button onClick={onConfirmDelete} className="rounded-lg bg-destructive px-3 py-1.5 text-xs font-bold text-white hover:bg-destructive/90">
+                Yes, delete
+              </button>
+              <button onClick={onCancelDelete} className="rounded-lg border border-border px-3 py-1.5 text-xs font-bold hover:bg-accent">
+                Cancel
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={onDelete}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-bold text-red-700 hover:bg-red-100 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400"
+            >
+              <Trash2 size={13} /> Delete
+            </button>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={onCancel} className="rounded-lg border border-border px-3 py-1.5 text-xs font-bold hover:bg-accent">
+            <X size={13} className="inline mr-1" />Cancel
+          </button>
+          <button
+            onClick={onSave}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-gc-orange px-4 py-1.5 text-xs font-bold text-white hover:bg-gc-orange/90"
+          >
+            <Save size={13} /> Save
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Create form ───────────────────────────────────────────────────────────────
+function CreateForm({ draft, setDraft, owners, campaignOptions, onSave, onCancel }: {
+  draft: Partial<Task>;
+  setDraft: React.Dispatch<React.SetStateAction<Partial<Task>>>;
+  owners: string[];
+  campaignOptions: string[];
+  onSave: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="rounded-xl border border-orange-200 bg-orange-50/40 dark:border-orange-900/40 dark:bg-orange-950/10 shadow-sm">
+      <div className="flex items-center justify-between border-b border-orange-100 dark:border-orange-900/30 px-4 py-3">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-[1.5px] text-gc-orange">Task Editor</p>
-          <h3 className="text-lg font-bold text-foreground">{title}</h3>
+          <p className="text-[10px] font-bold uppercase tracking-[1.5px] text-gc-orange">New Task</p>
+          <p className="text-sm font-bold text-foreground">Fill in the details below</p>
         </div>
         <button onClick={onCancel} className="icon-btn"><X size={15} /></button>
       </div>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <Field label="Title" value={draft.title || ''} onChange={(value: string) => setDraft({ ...draft, title: value })} />
-        <label>
-          <span className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Assignee</span>
+
+      <div className="grid grid-cols-1 gap-3 px-4 py-4 md:grid-cols-2 lg:grid-cols-3">
+        <label className="flex flex-col gap-1 lg:col-span-2">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Title *</span>
+          <input
+            autoFocus
+            className="settings-input"
+            placeholder="What needs to be done?"
+            value={draft.title || ''}
+            onChange={e => setDraft(d => ({ ...d, title: e.target.value }))}
+            onKeyDown={e => { if (e.key === 'Enter') onSave(); }}
+          />
+        </label>
+
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Assignee</span>
           <input
             className="settings-input"
-            list="owner-options-create"
-            placeholder="Type or select a team member..."
+            list="create-owners"
+            placeholder="Type or pick…"
             value={draft.ownerId || ''}
-            onChange={(event) => setDraft({ ...draft, ownerId: event.target.value })}
+            onChange={e => setDraft(d => ({ ...d, ownerId: e.target.value }))}
           />
-          <datalist id="owner-options-create">
-            {owners.map((owner: string) => <option key={owner} value={owner} />)}
+          <datalist id="create-owners">
+            {owners.map(o => <option key={o} value={o} />)}
           </datalist>
         </label>
-        <label>
-          <span className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Campaign</span>
-          <input className="settings-input" list="campaign-options" value={draft.campaignId || ''} onChange={(event) => setDraft({ ...draft, campaignId: event.target.value })} />
-          <datalist id="campaign-options">
-            {campaigns.map((campaign: string) => <option key={campaign} value={campaign} />)}
+
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Campaign</span>
+          <input
+            className="settings-input"
+            list="create-campaigns"
+            placeholder="Campaign name…"
+            value={draft.campaignId || ''}
+            onChange={e => setDraft(d => ({ ...d, campaignId: e.target.value }))}
+          />
+          <datalist id="create-campaigns">
+            {campaignOptions.map(c => <option key={c} value={c} />)}
           </datalist>
         </label>
-        <label>
-          <span className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Priority</span>
-          <select className="settings-input" value={draft.priority || 'Medium'} onChange={(event) => setDraft({ ...draft, priority: event.target.value })}>
-            {PRIORITIES.map((priority) => <option key={priority} value={priority}>{priority}</option>)}
+
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Priority</span>
+          <select className="settings-input" value={draft.priority || 'Medium'} onChange={e => setDraft(d => ({ ...d, priority: e.target.value as Task['priority'] }))}>
+            {(['Low', 'Medium', 'High', 'Critical'] as Task['priority'][]).map(p => <option key={p} value={p}>{p}</option>)}
           </select>
         </label>
-        <label>
-          <span className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Due Date</span>
-          <input className="settings-input" type="date" value={formatDueDate(draft.dueDate, 'yyyy-MM-dd')} onChange={(event) => setDraft({ ...draft, dueDate: parseDateInput(event.target.value, draft.dueDate) })} />
+
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Due Date</span>
+          <input
+            className="settings-input"
+            type="date"
+            value={fmt(draft.dueDate, 'yyyy-MM-dd')}
+            onChange={e => setDraft(d => ({ ...d, dueDate: parseDateInput(e.target.value, d.dueDate) }))}
+          />
         </label>
-        <label className="md:col-span-2">
-          <span className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Description</span>
-          <textarea className="settings-input min-h-24" value={draft.description || ''} onChange={(event) => setDraft({ ...draft, description: event.target.value })} />
+
+        <label className="flex flex-col gap-1 lg:col-span-3">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Description</span>
+          <textarea
+            className="settings-input min-h-16 resize-none"
+            placeholder="Optional details…"
+            value={draft.description || ''}
+            onChange={e => setDraft(d => ({ ...d, description: e.target.value }))}
+            rows={2}
+          />
         </label>
       </div>
-      <div className="mt-4 flex justify-end gap-2">
+
+      <div className="flex justify-end gap-2 border-t border-orange-100 dark:border-orange-900/30 px-4 py-3">
         <button onClick={onCancel} className="rounded-lg border border-border px-4 py-2 text-sm font-bold hover:bg-accent">Cancel</button>
         <button onClick={onSave} className="inline-flex items-center gap-2 rounded-lg bg-gc-orange px-4 py-2 text-sm font-bold text-white hover:bg-gc-orange/90">
-          <Save size={15} />
-          Save Task
+          <Save size={15} /> Create Task
         </button>
       </div>
     </div>
   );
 }
 
-function Field({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+// ── Small components ──────────────────────────────────────────────────────────
+function StatCard({ label, value, color }: { label: string; value: number; color: string }) {
   return (
-    <label>
-      <span className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">{label}</span>
-      <input className="settings-input" value={value} onChange={(event) => onChange(event.target.value)} />
-    </label>
-  );
-}
-
-function Select({ value, onChange, options }: { value: string; onChange: (value: string) => void; options: string[] }) {
-  return (
-    <select className="settings-input min-w-36 capitalize" value={value} onChange={(event) => onChange(event.target.value)}>
-      {options.map((option) => <option key={option} value={option}>{option}</option>)}
-    </select>
-  );
-}
-
-function TaskStat({ label, value, tone }: { label: string; value: number; tone: 'orange' | 'red' | 'green' | 'purple' }) {
-  const tones = {
-    orange: 'text-gc-orange',
-    red: 'text-red-600',
-    green: 'text-green-600',
-    purple: 'text-purple-600 dark:text-purple-400',
-  };
-  return (
-    <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-card">
-      <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">{label}</p>
-      <p className={cn('mt-1 text-3xl font-bold tabular-nums', tones[tone])}>{value}</p>
+    <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
+      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p className={cn('mt-1 text-3xl font-bold tabular-nums', color)}>{value}</p>
     </div>
   );
 }
 
-function TaskPill({ label, tone }: { label: string; tone: 'neutral' | 'orange' | 'red' | 'green' | 'purple' }) {
-  const tones = {
-    neutral: 'border-border bg-secondary text-foreground',
-    orange: 'border-orange-200 bg-orange-50 text-orange-700',
-    red: 'border-red-200 bg-red-50 text-red-700',
-    green: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-    purple: 'border-purple-200 bg-purple-50 text-purple-700',
-  };
-
-  return (
-    <span className={cn('inline-flex rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[1.2px]', tones[tone])}>
-      {label}
-    </span>
-  );
-}
-
-function priorityTone(priority: Task['priority']): 'green' | 'orange' | 'purple' | 'red' {
-  if (priority === 'Critical') return 'red';
-  if (priority === 'High') return 'orange';
-  if (priority === 'Medium') return 'purple';
-  return 'green';
-}
-
 const PRIORITY_DOT: Record<string, string> = {
-  Critical: '#dc2626',
-  High: '#f97316',
-  Medium: '#d97706',
-  Low: '#16a34a',
+  Critical: '#dc2626', High: '#f97316', Medium: '#d97706', Low: '#16a34a',
 };
 
-function PrioritySelect({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-}) {
+function PrioritySelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   return (
     <div className="relative min-w-36">
       {value !== 'all' && (
         <span
-          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-2.5 w-2.5 rounded-full"
+          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-2 w-2 rounded-full"
           style={{ background: PRIORITY_DOT[value] }}
         />
       )}
       <select
-        className={cn('settings-input capitalize', value !== 'all' && 'pl-8')}
+        className={cn('settings-input', value !== 'all' && 'pl-8')}
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={e => onChange(e.target.value)}
       >
         <option value="all">All priorities</option>
-        {PRIORITIES.map((p) => (
-          <option key={p} value={p}>
-            {p}
-          </option>
+        {(['Low', 'Medium', 'High', 'Critical'] as Task['priority'][]).map(p => (
+          <option key={p} value={p}>{p}</option>
         ))}
       </select>
     </div>
