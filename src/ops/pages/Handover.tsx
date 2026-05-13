@@ -17,7 +17,7 @@ import {
 import { useAuth } from '../App';
 import { filterHandoversByRole, filterOwnerOptionsByRole, filterTasksByRole, filterTeamOptionsByRole, getWorkspaceScope } from '../lib/workspace';
 import { cn } from '../utils';
-import { dataService } from '../services/dataService';
+import { dataService, TEAM_MEMBERS } from '../services/dataService';
 import { notify } from '../services/notificationService';
 import { Handover, Task } from '../types';
 
@@ -64,7 +64,7 @@ export default function HandoverCenter() {
 
   const owners = useMemo(() => {
     const fromTasks = tasks.map((task) => task.ownerId.trim()).filter(Boolean);
-    const combined = Array.from(new Set([...adminUsers, ...fromTasks]));
+    const combined = Array.from(new Set([...TEAM_MEMBERS, ...adminUsers, ...fromTasks]));
     return filterOwnerOptionsByRole(role, combined);
   }, [role, tasks, adminUsers]);
 
@@ -217,9 +217,9 @@ export default function HandoverCenter() {
             <SelectField label="Date" value={draft.handoffDate || ''} onChange={(value) => setDraft({ ...draft, handoffDate: value })} options={[]} type="date" />
             <SelectField label="Team" value={draft.team || defaultTeam} onChange={(value) => setDraft({ ...draft, team: value })} options={teamOptions} />
             <SelectField label="Region" value={draft.region || 'Regional'} onChange={(value) => setDraft({ ...draft, region: value })} options={REGION_OPTIONS} />
-            <SelectField label="Outgoing Lead" value={draft.outgoingLead || ''} onChange={(value) => setDraft({ ...draft, outgoingLead: value })} options={owners} />
+            <FreeTextField label="Outgoing Lead" value={draft.outgoingLead || ''} onChange={(value) => setDraft({ ...draft, outgoingLead: value })} options={owners} listId="outgoing-lead-options" placeholder="Type or select..." />
             <SelectField label="From Shift" value={draft.fromShift || 'Morning'} onChange={(value) => setDraft({ ...draft, fromShift: value as Handover['fromShift'] })} options={SHIFT_OPTIONS} />
-            <SelectField label="Incoming Lead" value={draft.incomingLead || ''} onChange={(value) => setDraft({ ...draft, incomingLead: value })} options={owners} />
+            <FreeTextField label="Incoming Lead" value={draft.incomingLead || ''} onChange={(value) => setDraft({ ...draft, incomingLead: value })} options={owners} listId="incoming-lead-options" placeholder="Type or select..." />
             <SelectField label="To Shift" value={draft.toShift || 'Mid'} onChange={(value) => setDraft({ ...draft, toShift: value as Handover['toShift'] })} options={SHIFT_OPTIONS} />
             <div className="rounded-xl border border-orange-100 bg-orange-50/60 p-4 dark:border-orange-900/30 dark:bg-orange-900/10">
               <p className="text-[11px] font-bold uppercase tracking-wider text-gc-orange">Relay summary</p>
@@ -416,6 +416,29 @@ export default function HandoverCenter() {
         </div>
       </div>
     </div>
+  );
+}
+
+function FreeTextField({
+  label, value, onChange, options, listId, placeholder,
+}: {
+  label: string; value: string; onChange: (value: string) => void;
+  options: string[]; listId: string; placeholder?: string;
+}) {
+  return (
+    <label>
+      <span className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">{label}</span>
+      <input
+        className="settings-input"
+        list={listId}
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      <datalist id={listId}>
+        {options.map((o) => <option key={o} value={o} />)}
+      </datalist>
+    </label>
   );
 }
 

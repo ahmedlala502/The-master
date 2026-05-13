@@ -21,7 +21,7 @@ import { format, isPast, isValid } from 'date-fns';
 import { useAuth } from '../App';
 import { filterCampaignsByRole, filterOwnerOptionsByRole, filterTasksByRole } from '../lib/workspace';
 import { cn } from '../utils';
-import { dataService } from '../services/dataService';
+import { dataService, TEAM_MEMBERS } from '../services/dataService';
 import { notify } from '../services/notificationService';
 import { Task } from '../types';
 
@@ -148,6 +148,7 @@ export default function PriorityBoard() {
     role,
     Array.from(
       new Set([
+        ...TEAM_MEMBERS,
         ...supabaseUsers,
         ...tasks.map((t) => t.ownerId?.trim()).filter(Boolean) as string[],
       ])
@@ -340,17 +341,16 @@ export default function PriorityBoard() {
               <span className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                 Assignee
               </span>
-              <select
+              <input
                 className="settings-input"
+                list="pb-owner-options"
+                placeholder="Type or select a team member..."
                 value={draft.ownerId || ''}
                 onChange={(e) => setDraft({ ...draft, ownerId: e.target.value })}
-              >
-                {owners.map((o) => (
-                  <option key={o} value={o}>
-                    {o}
-                  </option>
-                ))}
-              </select>
+              />
+              <datalist id="pb-owner-options">
+                {owners.map((o) => <option key={o} value={o} />)}
+              </datalist>
             </label>
             <label>
               <span className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">

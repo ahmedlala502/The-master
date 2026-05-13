@@ -20,11 +20,11 @@ import { format, isPast, isValid } from 'date-fns';
 import { useAuth } from '../App';
 import { filterCampaignsByRole, filterOwnerOptionsByRole, filterTasksByRole } from '../lib/workspace';
 import { cn } from '../utils';
-import { dataService } from '../services/dataService';
+import { dataService, TEAM_MEMBERS } from '../services/dataService';
 import { notify } from '../services/notificationService';
 import { Task } from '../types';
 
-// Owners are fetched from Supabase at runtime — no hardcoded list
+// Owner options: real team members + any owners already in existing tasks
 const PRIORITIES: Task['priority'][] = ['Low', 'Medium', 'High', 'Critical'];
 const ONE_DAY = 86400000;
 
@@ -51,7 +51,7 @@ const isTaskOverdue = (task: Task) => !task.completed && isPast(toValidDate(task
 const emptyDraft = (): Partial<Task> => ({
   title: '',
   description: '',
-  ownerId: 'Sarah A.',
+  ownerId: '',
   campaignId: 'Generic Ops',
   priority: 'Medium',
   dueDate: fallbackDueDate(),
@@ -91,6 +91,7 @@ export default function TasksCenter() {
 
   const campaigns = filterCampaignsByRole(role, dataService.getCampaigns());
   const owners = filterOwnerOptionsByRole(role, Array.from(new Set([
+    ...TEAM_MEMBERS,
     ...supabaseUsers,
     ...tasks.map((task) => task.ownerId?.trim()).filter(Boolean) as string[],
   ])));
@@ -344,17 +345,18 @@ export default function TasksCenter() {
                         />
                         <label>
                           <span className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Assignee</span>
-                          <select
+                          <input
                             className="settings-input"
+                            list={`owner-options-${task.id}`}
+                            placeholder="Type or select..."
                             value={expandedDraft.ownerId || ''}
                             onChange={(event) => setExpandedDraft((current) => ({ ...current!, ownerId: event.target.value }))}
-                          >
+                          />
+                          <datalist id={`owner-options-${task.id}`}>
                             {owners.map((owner) => (
-                              <option key={owner} value={owner}>
-                                {owner}
-                              </option>
+                              <option key={owner} value={owner} />
                             ))}
-                          </select>
+                          </datalist>
                         </label>
 
                         <label>
@@ -489,9 +491,16 @@ function TaskEditor({ draft, setDraft, campaigns, owners, title, onSave, onCance
         <Field label="Title" value={draft.title || ''} onChange={(value: string) => setDraft({ ...draft, title: value })} />
         <label>
           <span className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Assignee</span>
-          <select className="settings-input" value={draft.ownerId || ''} onChange={(event) => setDraft({ ...draft, ownerId: event.target.value })}>
-            {owners.map((owner: string) => <option key={owner} value={owner}>{owner}</option>)}
-          </select>
+          <input
+            className="settings-input"
+            list="owner-options-create"
+            placeholder="Type or select a team member..."
+            value={draft.ownerId || ''}
+            onChange={(event) => setDraft({ ...draft, ownerId: event.target.value })}
+          />
+          <datalist id="owner-options-create">
+            {owners.map((owner: string) => <option key={owner} value={owner} />)}
+          </datalist>
         </label>
         <label>
           <span className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Campaign</span>

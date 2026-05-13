@@ -101,22 +101,61 @@ const INITIAL_BLOCKERS_DATA: Blocker[] = [
   },
 ];
 
+// Real team roles used as default owner options across the workspace
+export const TEAM_MEMBERS: string[] = [
+  'Campaign Manager',
+  'Community Lead',
+  'Coordination Lead',
+  'Coverage Lead',
+  'QA Lead',
+  'Finance Lead',
+  'Head of Operations',
+];
+
+const d = (iso: string) => new Date(iso).getTime();
+
 const INITIAL_TASKS_DATA: Task[] = [
-  {
-    id: 'TSK-1778652654446', title: 'Assign owner for task manager per shift', description: '',
-    ownerId: 'Ahmed E.', campaignId: 'N/A', priority: 'High', dueDate: 1778662800000,
-    completed: false, createdAt: 1778652654446, updatedAt: 1778652654446, createdBy: 'admin',
-  },
-  {
-    id: 'TSK-103', title: 'Archive June coverage receipts', description: 'Batch process in GDrive',
-    ownerId: 'Mona K.', campaignId: 'Generic Ops', priority: 'Low', dueDate: 1776816000000,
-    completed: false, createdAt: 1778652582144, updatedAt: 1778652582144, createdBy: 'system',
-  },
-  {
-    id: 'TSK-104', title: 'Escalation: Missing recovery Jeddah', description: 'Contact restaurant manager',
-    ownerId: 'Sarah A.', campaignId: 'Hungerstation', priority: 'High', dueDate: 1776470400000,
-    completed: false, createdAt: 1778652582144, updatedAt: 1778652582144, createdBy: 'system',
-  },
+  // ── Starbucks · Mr Beast Riyadh Visit Push (KSA) ──
+  { id: 'TRYGC-BO-2026-0001-T01', title: 'Review client request', description: 'Validate brief completeness, scope, timeline, commercial model, and internal launch readiness.', ownerId: 'Campaign Manager', campaignId: 'Mr Beast Riyadh Visit Push', priority: 'High', dueDate: d('2026-05-11T19:01:16.261Z'), completed: false, createdAt: d('2026-05-11T15:01:16.261Z'), updatedAt: d('2026-05-11T15:01:16.261Z'), createdBy: 'system' },
+  { id: 'TRYGC-BO-2026-0001-T02', title: 'Build influencer list', description: 'Filter creators by market, city, category, tier, language, followers, and blacklists.', ownerId: 'Community Lead', campaignId: 'Mr Beast Riyadh Visit Push', priority: 'High', dueDate: d('2026-05-12T02:01:16.261Z'), completed: false, createdAt: d('2026-05-11T15:01:16.261Z'), updatedAt: d('2026-05-11T15:01:16.261Z'), createdBy: 'system' },
+  { id: 'TRYGC-BO-2026-0001-T03', title: 'Collect confirmations', description: 'Send invitations, manage responses, confirm creator availability, and prepare approval list if required.', ownerId: 'Community Lead', campaignId: 'Mr Beast Riyadh Visit Push', priority: 'High', dueDate: d('2026-05-12T02:01:16.261Z'), completed: false, createdAt: d('2026-05-11T15:01:16.261Z'), updatedAt: d('2026-05-11T15:01:16.261Z'), createdBy: 'system' },
+  { id: 'TRYGC-BO-2026-0001-T04', title: 'Prepare coordination plan', description: 'Confirm branches, visit windows, creator instructions, client availability, and schedule.', ownerId: 'Coordination Lead', campaignId: 'Mr Beast Riyadh Visit Push', priority: 'High', dueDate: d('2026-05-11T23:01:16.261Z'), completed: false, createdAt: d('2026-05-11T15:01:16.261Z'), updatedAt: d('2026-05-11T15:01:16.261Z'), createdBy: 'system' },
+  { id: 'TRYGC-BO-2026-0001-T05', title: 'Prepare coverage tracker', description: 'Create deliverables tracker for stories, reels, posts, TikTok, Snapchat, UGC, proof links, and deadlines.', ownerId: 'Coverage Lead', campaignId: 'Mr Beast Riyadh Visit Push', priority: 'High', dueDate: d('2026-05-12T13:01:16.261Z'), completed: false, createdAt: d('2026-05-11T15:01:16.261Z'), updatedAt: d('2026-05-11T15:01:16.261Z'), createdBy: 'system' },
+  { id: 'TRYGC-BO-2026-0001-T06', title: 'Validate content requirements', description: 'Review campaign guidelines, tags, brand tone, approval logic, and QA checklist.', ownerId: 'QA Lead', campaignId: 'Mr Beast Riyadh Visit Push', priority: 'High', dueDate: d('2026-05-11T20:01:16.261Z'), completed: false, createdAt: d('2026-05-11T15:01:16.261Z'), updatedAt: d('2026-05-11T15:01:16.261Z'), createdBy: 'system' },
+  { id: 'TRYGC-BO-2026-0001-T07', title: 'Validate commercials', description: 'Confirm budget, currency, compensation model, payment status, and invoice/payment risks.', ownerId: 'Finance Lead', campaignId: 'Mr Beast Riyadh Visit Push', priority: 'High', dueDate: d('2026-05-12T02:01:16.261Z'), completed: false, createdAt: d('2026-05-11T15:01:16.261Z'), updatedAt: d('2026-05-11T15:01:16.261Z'), createdBy: 'system' },
+  { id: 'TRYGC-BO-2026-0001-T08', title: 'Monitor campaign risk', description: 'Review SLA exposure, urgency, missing information, and escalation requirements.', ownerId: 'Head of Operations', campaignId: 'Mr Beast Riyadh Visit Push', priority: 'High', dueDate: d('2026-05-11T19:01:16.261Z'), completed: false, createdAt: d('2026-05-11T15:01:16.261Z'), updatedAt: d('2026-05-11T15:01:16.261Z'), createdBy: 'system' },
+  { id: 'TRYGC-BO-2026-0001-T09', title: 'Confirm branch visit schedule', description: 'Lock branch schedule, slots, creator arrival process, and no-show escalation rule.', ownerId: 'Coordination Lead', campaignId: 'Mr Beast Riyadh Visit Push', priority: 'High', dueDate: d('2026-05-11T23:01:16.261Z'), completed: false, createdAt: d('2026-05-11T15:01:16.261Z'), updatedAt: d('2026-05-11T15:01:16.261Z'), createdBy: 'system' },
+  { id: 'TRYGC-BO-2026-0001-T10', title: 'Track visit-to-post completion', description: 'Compare confirmed visits against submitted coverage and flag missing coverage.', ownerId: 'Coverage Lead', campaignId: 'Mr Beast Riyadh Visit Push', priority: 'High', dueDate: d('2026-05-12T13:01:16.261Z'), completed: false, createdAt: d('2026-05-11T15:01:16.261Z'), updatedAt: d('2026-05-11T15:01:16.261Z'), createdBy: 'system' },
+  { id: 'TRYGC-BO-2026-0001-T11', title: 'Manage client approval cycle', description: 'Send proposed influencer list, track approval, and confirm final approved creators.', ownerId: 'Campaign Manager', campaignId: 'Mr Beast Riyadh Visit Push', priority: 'High', dueDate: d('2026-05-11T19:01:16.261Z'), completed: false, createdAt: d('2026-05-11T15:01:16.261Z'), updatedAt: d('2026-05-11T15:01:16.261Z'), createdBy: 'system' },
+  { id: 'TRYGC-BO-2026-0001-T12', title: 'Prepare reporting structure', description: 'Prepare final report fields: links, screenshots, views, interactions, missing items, and remarks.', ownerId: 'Coverage Lead', campaignId: 'Mr Beast Riyadh Visit Push', priority: 'High', dueDate: d('2026-05-12T13:01:16.261Z'), completed: true, createdAt: d('2026-05-11T15:01:16.261Z'), updatedAt: d('2026-05-11T15:01:16.261Z'), createdBy: 'system' },
+  { id: 'TRYGC-BO-2026-0001-T13', title: 'Apply KSA routing', description: 'Assign KSA team, SAR currency, city routing, and local creator communication.', ownerId: 'Coordination Lead', campaignId: 'Mr Beast Riyadh Visit Push', priority: 'High', dueDate: d('2026-05-11T23:01:16.261Z'), completed: false, createdAt: d('2026-05-11T15:01:16.261Z'), updatedAt: d('2026-05-11T15:01:16.261Z'), createdBy: 'system' },
+  // ── Tashas · Dubai Lifestyle Coverage (UAE) ──
+  { id: 'TRYGC-BO-2026-0002-T01', title: 'Review client request', description: 'Validate brief completeness, scope, timeline, commercial model, and internal launch readiness.', ownerId: 'Campaign Manager', campaignId: 'Dubai Lifestyle Coverage', priority: 'Medium', dueDate: d('2026-05-11T23:01:16.261Z'), completed: false, createdAt: d('2026-05-11T15:01:16.261Z'), updatedAt: d('2026-05-11T15:01:16.261Z'), createdBy: 'system' },
+  { id: 'TRYGC-BO-2026-0002-T02', title: 'Build influencer list', description: 'Filter creators by market, city, category, tier, language, followers, and blacklists.', ownerId: 'Community Lead', campaignId: 'Dubai Lifestyle Coverage', priority: 'Medium', dueDate: d('2026-05-12T15:01:16.261Z'), completed: false, createdAt: d('2026-05-11T15:01:16.261Z'), updatedAt: d('2026-05-11T15:01:16.261Z'), createdBy: 'system' },
+  { id: 'TRYGC-BO-2026-0002-T03', title: 'Collect confirmations', description: 'Send invitations, manage responses, confirm creator availability, and prepare approval list if required.', ownerId: 'Community Lead', campaignId: 'Dubai Lifestyle Coverage', priority: 'Medium', dueDate: d('2026-05-12T15:01:16.261Z'), completed: false, createdAt: d('2026-05-11T15:01:16.261Z'), updatedAt: d('2026-05-11T15:01:16.261Z'), createdBy: 'system' },
+  { id: 'TRYGC-BO-2026-0002-T04', title: 'Prepare coordination plan', description: 'Confirm branches, visit windows, creator instructions, client availability, and schedule.', ownerId: 'Coordination Lead', campaignId: 'Dubai Lifestyle Coverage', priority: 'Medium', dueDate: d('2026-05-12T09:01:16.261Z'), completed: false, createdAt: d('2026-05-11T15:01:16.261Z'), updatedAt: d('2026-05-11T15:01:16.261Z'), createdBy: 'system' },
+  { id: 'TRYGC-BO-2026-0002-T05', title: 'Prepare coverage tracker', description: 'Create deliverables tracker for stories, reels, posts, TikTok, Snapchat, UGC, proof links, and deadlines.', ownerId: 'Coverage Lead', campaignId: 'Dubai Lifestyle Coverage', priority: 'Medium', dueDate: d('2026-05-13T15:01:16.261Z'), completed: false, createdAt: d('2026-05-11T15:01:16.261Z'), updatedAt: d('2026-05-11T15:01:16.261Z'), createdBy: 'system' },
+  { id: 'TRYGC-BO-2026-0002-T06', title: 'Validate content requirements', description: 'Review campaign guidelines, tags, brand tone, approval logic, and QA checklist.', ownerId: 'QA Lead', campaignId: 'Dubai Lifestyle Coverage', priority: 'Medium', dueDate: d('2026-05-12T03:01:16.261Z'), completed: false, createdAt: d('2026-05-11T15:01:16.261Z'), updatedAt: d('2026-05-11T15:01:16.261Z'), createdBy: 'system' },
+  { id: 'TRYGC-BO-2026-0002-T07', title: 'Validate commercials', description: 'Confirm budget, currency, compensation model, payment status, and invoice/payment risks.', ownerId: 'Finance Lead', campaignId: 'Dubai Lifestyle Coverage', priority: 'Medium', dueDate: d('2026-05-12T15:01:16.261Z'), completed: false, createdAt: d('2026-05-11T15:01:16.261Z'), updatedAt: d('2026-05-11T15:01:16.261Z'), createdBy: 'system' },
+  { id: 'TRYGC-BO-2026-0002-T08', title: 'Monitor campaign risk', description: 'Review SLA exposure, urgency, missing information, and escalation requirements.', ownerId: 'Head of Operations', campaignId: 'Dubai Lifestyle Coverage', priority: 'Medium', dueDate: d('2026-05-11T21:01:16.261Z'), completed: false, createdAt: d('2026-05-11T15:01:16.261Z'), updatedAt: d('2026-05-11T15:01:16.261Z'), createdBy: 'system' },
+  { id: 'TRYGC-BO-2026-0002-T09', title: 'Confirm branch visit schedule', description: 'Lock branch schedule, slots, creator arrival process, and no-show escalation rule.', ownerId: 'Coordination Lead', campaignId: 'Dubai Lifestyle Coverage', priority: 'Medium', dueDate: d('2026-05-12T09:01:16.261Z'), completed: false, createdAt: d('2026-05-11T15:01:16.261Z'), updatedAt: d('2026-05-11T15:01:16.261Z'), createdBy: 'system' },
+  { id: 'TRYGC-BO-2026-0002-T10', title: 'Track visit-to-post completion', description: 'Compare confirmed visits against submitted coverage and flag missing coverage.', ownerId: 'Coverage Lead', campaignId: 'Dubai Lifestyle Coverage', priority: 'Medium', dueDate: d('2026-05-13T15:01:16.261Z'), completed: true, createdAt: d('2026-05-11T15:01:16.261Z'), updatedAt: d('2026-05-11T15:01:16.261Z'), createdBy: 'system' },
+  { id: 'TRYGC-BO-2026-0002-T11', title: 'Prepare reporting structure', description: 'Prepare final report fields: links, screenshots, views, interactions, missing items, and remarks.', ownerId: 'Coverage Lead', campaignId: 'Dubai Lifestyle Coverage', priority: 'Medium', dueDate: d('2026-05-13T15:01:16.261Z'), completed: false, createdAt: d('2026-05-11T15:01:16.261Z'), updatedAt: d('2026-05-11T15:01:16.261Z'), createdBy: 'system' },
+  { id: 'TRYGC-BO-2026-0002-T12', title: 'Apply UAE routing', description: 'Assign UAE team, AED currency, emirate routing, and branch timing.', ownerId: 'Coordination Lead', campaignId: 'Dubai Lifestyle Coverage', priority: 'Medium', dueDate: d('2026-05-12T09:01:16.261Z'), completed: false, createdAt: d('2026-05-11T15:01:16.261Z'), updatedAt: d('2026-05-11T15:01:16.261Z'), createdBy: 'system' },
+  // ── FNP · Mother's Day Product Seeding (Kuwait) ──
+  { id: 'TRYGC-BO-2026-0003-T01', title: 'Review client request', description: 'Validate brief completeness, scope, timeline, commercial model, and internal launch readiness.', ownerId: 'Campaign Manager', campaignId: "Mother's Day Product Seeding", priority: 'Medium', dueDate: d('2026-05-11T21:01:16.261Z'), completed: false, createdAt: d('2026-05-11T15:01:16.261Z'), updatedAt: d('2026-05-11T15:01:16.261Z'), createdBy: 'system' },
+  { id: 'TRYGC-BO-2026-0003-T02', title: 'Build influencer list', description: 'Filter creators by market, city, category, tier, language, followers, and blacklists.', ownerId: 'Community Lead', campaignId: "Mother's Day Product Seeding", priority: 'Medium', dueDate: d('2026-05-12T08:01:16.261Z'), completed: false, createdAt: d('2026-05-11T15:01:16.261Z'), updatedAt: d('2026-05-11T15:01:16.261Z'), createdBy: 'system' },
+  { id: 'TRYGC-BO-2026-0003-T03', title: 'Collect confirmations', description: 'Send invitations, manage responses, confirm creator availability, and prepare approval list if required.', ownerId: 'Community Lead', campaignId: "Mother's Day Product Seeding", priority: 'Medium', dueDate: d('2026-05-12T08:01:16.261Z'), completed: false, createdAt: d('2026-05-11T15:01:16.261Z'), updatedAt: d('2026-05-11T15:01:16.261Z'), createdBy: 'system' },
+  { id: 'TRYGC-BO-2026-0003-T04', title: 'Prepare coordination plan', description: 'Confirm branches, visit windows, creator instructions, client availability, and schedule.', ownerId: 'Coordination Lead', campaignId: "Mother's Day Product Seeding", priority: 'Medium', dueDate: d('2026-05-12T04:01:16.261Z'), completed: false, createdAt: d('2026-05-11T15:01:16.261Z'), updatedAt: d('2026-05-11T15:01:16.261Z'), createdBy: 'system' },
+  { id: 'TRYGC-BO-2026-0003-T05', title: 'Prepare coverage tracker', description: 'Create deliverables tracker for stories, reels, posts, TikTok, Snapchat, UGC, proof links, and deadlines.', ownerId: 'Coverage Lead', campaignId: "Mother's Day Product Seeding", priority: 'Medium', dueDate: d('2026-05-13T01:01:16.261Z'), completed: false, createdAt: d('2026-05-11T15:01:16.261Z'), updatedAt: d('2026-05-11T15:01:16.261Z'), createdBy: 'system' },
+  { id: 'TRYGC-BO-2026-0003-T06', title: 'Validate content requirements', description: 'Review campaign guidelines, tags, brand tone, approval logic, and QA checklist.', ownerId: 'QA Lead', campaignId: "Mother's Day Product Seeding", priority: 'Medium', dueDate: d('2026-05-11T23:01:16.261Z'), completed: false, createdAt: d('2026-05-11T15:01:16.261Z'), updatedAt: d('2026-05-11T15:01:16.261Z'), createdBy: 'system' },
+  { id: 'TRYGC-BO-2026-0003-T07', title: 'Validate commercials', description: 'Confirm budget, currency, compensation model, payment status, and invoice/payment risks.', ownerId: 'Finance Lead', campaignId: "Mother's Day Product Seeding", priority: 'Medium', dueDate: d('2026-05-12T08:01:16.261Z'), completed: false, createdAt: d('2026-05-11T15:01:16.261Z'), updatedAt: d('2026-05-11T15:01:16.261Z'), createdBy: 'system' },
+  { id: 'TRYGC-BO-2026-0003-T08', title: 'Monitor campaign risk', description: 'Review SLA exposure, urgency, missing information, and escalation requirements.', ownerId: 'Head of Operations', campaignId: "Mother's Day Product Seeding", priority: 'Medium', dueDate: d('2026-05-11T21:01:16.261Z'), completed: false, createdAt: d('2026-05-11T15:01:16.261Z'), updatedAt: d('2026-05-11T15:01:16.261Z'), createdBy: 'system' },
+  { id: 'TRYGC-BO-2026-0003-T09', title: 'Collect delivery information', description: 'Collect creator addresses, contact numbers, dispatch details, and delivery proof.', ownerId: 'Coordination Lead', campaignId: "Mother's Day Product Seeding", priority: 'Medium', dueDate: d('2026-05-12T04:01:16.261Z'), completed: true, createdAt: d('2026-05-11T15:01:16.261Z'), updatedAt: d('2026-05-11T15:01:16.261Z'), createdBy: 'system' },
+  { id: 'TRYGC-BO-2026-0003-T10', title: 'Track delivery-to-post completion', description: 'Validate product received, content posted, and proof submitted.', ownerId: 'Coverage Lead', campaignId: "Mother's Day Product Seeding", priority: 'Medium', dueDate: d('2026-05-13T01:01:16.261Z'), completed: false, createdAt: d('2026-05-11T15:01:16.261Z'), updatedAt: d('2026-05-11T15:01:16.261Z'), createdBy: 'system' },
+  { id: 'TRYGC-BO-2026-0003-T11', title: 'Manage client approval cycle', description: 'Send proposed influencer list, track approval, and confirm final approved creators.', ownerId: 'Campaign Manager', campaignId: "Mother's Day Product Seeding", priority: 'Medium', dueDate: d('2026-05-11T21:01:16.261Z'), completed: false, createdAt: d('2026-05-11T15:01:16.261Z'), updatedAt: d('2026-05-11T15:01:16.261Z'), createdBy: 'system' },
+  { id: 'TRYGC-BO-2026-0003-T12', title: 'Prepare reporting structure', description: 'Prepare final report fields: links, screenshots, views, interactions, missing items, and remarks.', ownerId: 'Coverage Lead', campaignId: "Mother's Day Product Seeding", priority: 'Medium', dueDate: d('2026-05-13T01:01:16.261Z'), completed: false, createdAt: d('2026-05-11T15:01:16.261Z'), updatedAt: d('2026-05-11T15:01:16.261Z'), createdBy: 'system' },
+  { id: 'TRYGC-BO-2026-0003-T13', title: 'Apply Kuwait routing', description: 'Assign Kuwait team, KWD currency, area routing, and approval process.', ownerId: 'Coordination Lead', campaignId: "Mother's Day Product Seeding", priority: 'Medium', dueDate: d('2026-05-12T04:01:16.261Z'), completed: false, createdAt: d('2026-05-11T15:01:16.261Z'), updatedAt: d('2026-05-11T15:01:16.261Z'), createdBy: 'system' },
 ];
 
 const INITIAL_HANDOVERS_DATA: Handover[] = [
@@ -174,18 +213,20 @@ const saveToStorage = (key: string, data: any) => {
   }
 };
 
-// Clear any stale demo data from old storage keys
-(['GC_CAMPAIGNS', 'GC_INFLUENCERS', 'GC_BLOCKERS', 'GC_TASKS', 'GC_HANDOVERS'] as const).forEach(key => {
+// Clear any stale demo data from old storage keys (including V2)
+(['GC_CAMPAIGNS', 'GC_INFLUENCERS', 'GC_BLOCKERS', 'GC_TASKS', 'GC_HANDOVERS',
+  'GC_CAMPAIGNS_V2', 'GC_INFLUENCERS_V2', 'GC_BLOCKERS_V2', 'GC_TASKS_V2', 'GC_HANDOVERS_V2',
+] as const).forEach(key => {
   localStorage.removeItem(key);
 });
 
-// Versioned keys — ensures any previously stored demo data is ignored
+// V3 — seeded with real campaign tasks and team member roles
 const STORAGE_KEYS = {
-  campaigns: 'GC_CAMPAIGNS_V2',
-  influencers: 'GC_INFLUENCERS_V2',
-  blockers: 'GC_BLOCKERS_V2',
-  tasks: 'GC_TASKS_V2',
-  handovers: 'GC_HANDOVERS_V2',
+  campaigns: 'GC_CAMPAIGNS_V3',
+  influencers: 'GC_INFLUENCERS_V3',
+  blockers: 'GC_BLOCKERS_V3',
+  tasks: 'GC_TASKS_V3',
+  handovers: 'GC_HANDOVERS_V3',
 };
 
 export let CAMPAIGNS_DATA: Campaign[] = loadFromStorage(STORAGE_KEYS.campaigns, INITIAL_CAMPAIGNS_DATA);
