@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Check,
   CheckSquare,
@@ -24,7 +24,7 @@ import { dataService } from '../services/dataService';
 import { notify } from '../services/notificationService';
 import { Task } from '../types';
 
-const OWNERS = ['Ahmed E.', 'Sarah A.', 'Mona K.', 'Omar S.', 'Coverage Team', 'QA Team', 'Community Team'];
+// Owners are fetched from Supabase at runtime — no hardcoded list
 const PRIORITIES: Task['priority'][] = ['Low', 'Medium', 'High', 'Critical'];
 const ONE_DAY = 86400000;
 
@@ -77,9 +77,23 @@ export default function TasksCenter() {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [expandedDraft, setExpandedDraft] = useState<Partial<Task> | null>(null);
+  const [supabaseUsers, setSupabaseUsers] = useState<string[]>([]);
+
+  useEffect(() => {
+    let mounted = true;
+    import('../services/adminApi').then(({ adminApi }) => {
+      adminApi.listUsers().then(users => {
+        if (mounted) setSupabaseUsers(users.filter(u => u.status === 'active').map(u => u.displayName));
+      }).catch(() => {});
+    });
+    return () => { mounted = false; };
+  }, []);
 
   const campaigns = filterCampaignsByRole(role, dataService.getCampaigns());
-  const owners = filterOwnerOptionsByRole(role, Array.from(new Set([...OWNERS, ...tasks.map((task) => task.ownerId?.trim()).filter(Boolean)])));
+  const owners = filterOwnerOptionsByRole(role, Array.from(new Set([
+    ...supabaseUsers,
+    ...tasks.map((task) => task.ownerId?.trim()).filter(Boolean) as string[],
+  ])));
 
   const filteredTasks = useMemo(() => {
     return tasks

@@ -6,7 +6,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Settings as SettingsIcon,
-  User,
   Shield,
   Bell,
   Cloud,
@@ -15,8 +14,6 @@ import {
   Database,
   ChevronRight,
   Save,
-  Plus,
-  Trash2,
   Mail,
   Globe,
   Brain,
@@ -29,16 +26,9 @@ import { AI_PROVIDER_PRESETS, AiProviderConfig, AiProviderId } from '../services
 
 const SETTING_SECTIONS = [
   { id: 'general', label: 'General Info', icon: Sliders },
-  { id: 'team', label: 'Team Management', icon: User },
   { id: 'security', label: 'Security & API', icon: Shield },
   { id: 'notifications', label: 'Alert Protocols', icon: Bell },
   { id: 'cloud', label: 'Cloud Resources', icon: Cloud },
-];
-
-const initialTeam = [
-  { name: 'Ahmed Essmat', role: 'Admin / Owner', email: 'ahmed@trygc.com' },
-  { name: 'Mona Khaled', role: 'Ops Lead', email: 'mona@trygc.com' },
-  { name: 'Sarah Ali', role: 'Coverage Team', email: 'sarah@trygc.com' },
 ];
 
 const DEFAULT_AI_PROVIDER: AiProviderConfig = {
@@ -88,8 +78,6 @@ export default function SettingsWorkspace() {
     autoArchive: false,
     strictRbac: true,
   });
-  const [team, setTeam] = useState(initialTeam);
-
   const activeMeta = useMemo(() => SETTING_SECTIONS.find((section) => section.id === activeRoot), [activeRoot]);
 
   const updateSetting = (key: keyof typeof settings, value: string) => {
@@ -97,7 +85,7 @@ export default function SettingsWorkspace() {
   };
 
   const saveSettings = () => {
-    localStorage.setItem('trygc-settings', JSON.stringify({ settings, toggleStates, team, aiProvider }));
+    localStorage.setItem('trygc-settings', JSON.stringify({ settings, toggleStates, aiProvider }));
     if (supabaseUrl.trim()) localStorage.setItem('trygc-supabase-url', supabaseUrl.trim());
     if (supabaseKey.trim()) localStorage.setItem('trygc-supabase-key', supabaseKey.trim());
     setSaved(true);
@@ -181,28 +169,6 @@ export default function SettingsWorkspace() {
                   <EditableField label="Language Mode" value={settings.language} onChange={(value) => updateSetting('language', value)} />
                   <EditableField label="Approval Threshold %" value={settings.approvalThreshold} onChange={(value) => updateSetting('approvalThreshold', value)} />
                   <ToggleCard title="Auto Archive Completed Campaigns" desc="Move closed campaigns into the archive after reporting is approved." value={toggleStates.autoArchive} onChange={() => flipToggle('autoArchive', setToggleStates)} />
-                </div>
-              )}
-
-              {activeRoot === 'team' && (
-                <div className="space-y-3">
-                  {team.map((member, index) => (
-                    <div key={`${member.email}-${index}`} className="grid grid-cols-1 md:grid-cols-[1fr_1fr_1fr_auto] gap-3 rounded-lg border border-border p-3">
-                      <input className="settings-input" value={member.name} onChange={(event) => updateTeam(index, 'name', event.target.value, setTeam)} />
-                      <input className="settings-input" value={member.role} onChange={(event) => updateTeam(index, 'role', event.target.value, setTeam)} />
-                      <input className="settings-input" value={member.email} onChange={(event) => updateTeam(index, 'email', event.target.value, setTeam)} />
-                      <button className="icon-btn text-destructive" onClick={() => setTeam((items) => items.filter((_, itemIndex) => itemIndex !== index))}>
-                        <Trash2 size={15} />
-                      </button>
-                    </div>
-                  ))}
-                  <button
-                    onClick={() => setTeam((items) => [...items, { name: 'New Teammate', role: 'Viewer / Stakeholder', email: 'new@trygc.com' }])}
-                    className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-semibold hover:bg-accent"
-                  >
-                    <Plus size={15} />
-                    Add Team Member
-                  </button>
                 </div>
               )}
 
@@ -447,6 +413,3 @@ function flipToggle(key: string, setter: React.Dispatch<React.SetStateAction<Rec
   setter((current) => ({ ...current, [key]: !current[key] }));
 }
 
-function updateTeam(index: number, key: 'name' | 'role' | 'email', value: string, setter: React.Dispatch<React.SetStateAction<typeof initialTeam>>) {
-  setter((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, [key]: value } : item));
-}
