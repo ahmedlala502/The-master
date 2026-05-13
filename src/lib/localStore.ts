@@ -60,17 +60,12 @@ export interface LocalWorkspace {
 
 // Separate localStorage keys to prevent data collision
 const STORE_KEYS = {
-  workspace: 'trygc_hub_workspace_v6',   // bumped: clears stale v5 demo data
+  workspace: 'trygc_hub_workspace_v7',   // bumped: clears all demo data
   auth: 'trygc_hub_auth_v2',
   settings: 'trygc_hub_settings_v2',
   draft: 'trygc_hub_drafts_v1',
   cache: 'trygc_hub_cache_v1',
 };
-
-const DEMO_TASK_IDS = new Set(['t1', 't2', 't3']);
-const DEMO_HANDOVER_IDS = new Set(['h1']);
-const DEMO_MEMBER_IDS = new Set(['m1', 'm2', 'm3', 'm4']);
-const DEMO_OFFICE_IDS = new Set(['1', '2', '3', '4']);
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingSaves = 0;
@@ -382,12 +377,10 @@ export function loadWorkspace(): LocalWorkspace {
     const members = parsed.members?.length ? parsed.members : seed.members;
     const users = migrateWorkspaceUsers(parsed.users, members);
 
-    // Strip any lingering demo seed data
-    const cleanTasks = migrateTasks(parsed.tasks).filter(t => !DEMO_TASK_IDS.has(t.id));
-    const cleanHandovers = migrateHandovers(parsed.handovers).filter(h => !DEMO_HANDOVER_IDS.has(h.id));
-    const cleanMembers = members.filter(m => !DEMO_MEMBER_IDS.has(m.id));
-    const rawOffices = parsed.offices?.length ? parsed.offices : seed.offices;
-    const cleanOffices = rawOffices.filter(o => !DEMO_OFFICE_IDS.has(o.id));
+    const cleanTasks = migrateTasks(parsed.tasks);
+    const cleanHandovers = migrateHandovers(parsed.handovers);
+    const cleanMembers = members;
+    const cleanOffices = parsed.offices?.length ? parsed.offices : seed.offices;
 
     return {
       user: migrateMasterUser(parsed.user || seed.user, users),

@@ -10,13 +10,10 @@ export const COUNTRY_FLAGS: Record<string, string> = {
   'OM': '🇴🇲',
 };
 
-// Admin credentials are now set at runtime via environment or first-run setup
-// These defaults are ONLY used for initial workspace seeding and MUST be changed immediately
-export const DEFAULT_MASTER_ADMIN_EMAIL = import.meta.env.VITE_MASTER_ADMIN_EMAIL || 'admin@trygc.local';
-export const DEFAULT_MASTER_ADMIN_PASSWORD = import.meta.env.VITE_MASTER_ADMIN_PASSWORD || 'Admin123!';
+export const DEFAULT_MASTER_ADMIN_EMAIL = import.meta.env.VITE_MASTER_ADMIN_EMAIL || 'admin@trygc.com';
 export const MASTER_ADMIN_EMAIL = DEFAULT_MASTER_ADMIN_EMAIL;
-export const MASTER_ADMIN_PASSWORD = DEFAULT_MASTER_ADMIN_PASSWORD || '';
-export const SUPER_ADMIN_PASSWORD = MASTER_ADMIN_PASSWORD;
+export const MASTER_ADMIN_PASSWORD = '';
+export const SUPER_ADMIN_PASSWORD = '';
 
 export const APP_VERSION = '2.0.0';
 export const APP_NAME = 'TryGC Hub Manager';
