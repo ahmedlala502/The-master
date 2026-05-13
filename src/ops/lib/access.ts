@@ -4,6 +4,7 @@ const OPERATIONS_PATHS = new Set([
   '/',
   '/handover',
   '/tasks',
+  '/priority-board',
   '/blockers',
   '/analytics',
   '/assets',

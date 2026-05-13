@@ -4,7 +4,7 @@ import { useAuth } from '../App';
 import {
   LayoutDashboard, LogOut, Bell,
   Settings, ShieldCheck, AlertTriangle, History,
-  Shield, BarChart3, MessageSquare, CheckSquare,
+  Shield, BarChart3, MessageSquare, CheckSquare, Flame,
   Sun, Moon, RefreshCw, Download,
   ChevronRight,
   Search, X, SlidersHorizontal, Check, Clock, CircleAlert, CheckCircle2
@@ -23,11 +23,12 @@ type NavItem = {
 
 // ── Nav items ─────────────────────────────────────────────
 const OPS_NAV: NavItem[] = [
-  { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
-  { icon: RefreshCw,       label: 'Handover',  path: '/handover' },
-  { icon: CheckSquare,     label: 'Tasks',     path: '/tasks' },
-  { icon: AlertTriangle,   label: 'Blockers',  path: '/blockers' },
-  { icon: BarChart3,       label: 'Reporting', path: '/reporting' },
+  { icon: LayoutDashboard, label: 'Dashboard',      path: '/' },
+  { icon: RefreshCw,       label: 'Handover',       path: '/handover' },
+  { icon: CheckSquare,     label: 'Tasks',          path: '/tasks' },
+  { icon: Flame,           label: 'Priority Board', path: '/priority-board' },
+  { icon: AlertTriangle,   label: 'Blockers',       path: '/blockers' },
+  { icon: BarChart3,       label: 'Reporting',      path: '/reporting' },
 ];
 
 const SYSTEM_NAV: NavItem[] = [

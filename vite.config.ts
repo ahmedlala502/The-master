@@ -23,13 +23,16 @@ export default defineConfig(({ mode }) => {
       reportCompressedSize: false,
       sourcemap: !isProduction,
       minify: isProduction ? 'esbuild' : false,
+      chunkSizeWarningLimit: 1200,
       rollupOptions: {
         output: {
           manualChunks: {
-            charts: ['recharts', 'd3'],
-            motion: ['motion'],
-            icons: ['lucide-react'],
-            dates: ['date-fns'],
+            'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+            'vendor-ui': ['lucide-react', 'class-variance-authority', 'clsx', 'tailwind-merge'],
+            'vendor-charts': ['recharts', 'd3'],
+            'vendor-motion': ['motion'],
+            'vendor-dates': ['date-fns'],
+            'vendor-excel': ['exceljs'],
           },
         },
       },

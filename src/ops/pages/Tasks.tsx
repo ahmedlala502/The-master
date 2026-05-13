@@ -271,7 +271,7 @@ export default function TasksCenter() {
           </div>
           <Select value={ownerFilter} onChange={setOwnerFilter} options={['all', ...owners]} />
           <Select value={statusFilter} onChange={(value) => setStatusFilter(value as 'active' | 'completed' | 'all')} options={['all', 'active', 'completed']} />
-          <Select value={priorityFilter} onChange={(value) => setPriorityFilter(value as 'all' | Task['priority'])} options={['all', ...PRIORITIES]} />
+          <PrioritySelect value={priorityFilter} onChange={(value) => setPriorityFilter(value as 'all' | Task['priority'])} />
         </div>
 
         <div className="divide-y divide-border">
@@ -579,4 +579,42 @@ function priorityTone(priority: Task['priority']): 'green' | 'orange' | 'purple'
   if (priority === 'High') return 'orange';
   if (priority === 'Medium') return 'purple';
   return 'green';
+}
+
+const PRIORITY_DOT: Record<string, string> = {
+  Critical: '#dc2626',
+  High: '#f97316',
+  Medium: '#d97706',
+  Low: '#16a34a',
+};
+
+function PrioritySelect({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="relative min-w-36">
+      {value !== 'all' && (
+        <span
+          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-2.5 w-2.5 rounded-full"
+          style={{ background: PRIORITY_DOT[value] }}
+        />
+      )}
+      <select
+        className={cn('settings-input capitalize', value !== 'all' && 'pl-8')}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        <option value="all">All priorities</option>
+        {PRIORITIES.map((p) => (
+          <option key={p} value={p}>
+            {p}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
 }

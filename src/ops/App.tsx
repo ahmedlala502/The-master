@@ -11,6 +11,7 @@ import AuditLogs from './pages/AuditLogs';
 import Admin from './pages/Admin';
 import Reporting from './pages/Reporting';
 import Tasks from './pages/Tasks';
+import PriorityBoard from './pages/PriorityBoard';
 import Templates from './pages/Templates';
 import Analytics from './pages/Analytics';
 import AssetRegistry from './pages/AssetRegistry';
@@ -102,6 +103,7 @@ export default function App() {
             <Route path="audit" element={allow('/audit', <AuditLogs />)} />
             <Route path="reporting" element={allow('/reporting', <Reporting />)} />
             <Route path="tasks" element={allow('/tasks', <Tasks />)} />
+            <Route path="priority-board" element={allow('/priority-board', <PriorityBoard />)} />
             <Route path="templates" element={allow('/templates', <Templates />)} />
             <Route path="analytics" element={allow('/analytics', <Analytics />)} />
             <Route path="assets" element={allow('/assets', <AssetRegistry />)} />

@@ -246,31 +246,66 @@ export default function HandoverCenter() {
               </div>
               <span className="rounded-full bg-secondary px-3 py-1 text-xs font-bold text-foreground">{linkedTasks.length} selected</span>
             </div>
-            <div className="grid gap-3 md:grid-cols-2">
-              {activeTasks.map((task) => {
-                const selected = (draft.taskIds || []).includes(task.id);
-                return (
-                  <button
-                    key={task.id}
-                    onClick={() => toggleTask(task.id)}
-                    className={cn(
-                      'rounded-xl border p-4 text-left transition-colors',
-                      selected ? 'border-gc-orange bg-gc-orange/10' : 'border-border bg-background hover:bg-accent/40'
-                    )}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-bold text-foreground">{task.title}</p>
-                        <p className="mt-1 text-xs text-muted-foreground">{task.ownerId.trim()} · {task.campaignId}</p>
+            {activeTasks.length === 0 ? (
+              <p className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
+                No active tasks available to transfer.
+              </p>
+            ) : (
+              <div className="grid gap-3 md:grid-cols-2">
+                {activeTasks
+                  .slice()
+                  .sort((a, b) => {
+                    const w = { Critical: 4, High: 3, Medium: 2, Low: 1 };
+                    return w[b.priority] - w[a.priority];
+                  })
+                  .map((task) => {
+                  const selected = (draft.taskIds || []).includes(task.id);
+                  const overdue = !task.completed && new Date(task.dueDate) < new Date();
+                  return (
+                    <button
+                      key={task.id}
+                      onClick={() => toggleTask(task.id)}
+                      className={cn(
+                        'rounded-xl border p-4 text-left transition-colors',
+                        selected ? 'border-gc-orange bg-gc-orange/10' : 'border-border bg-background hover:bg-accent/40'
+                      )}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-bold text-foreground truncate">{task.title}</p>
+                          <p className="mt-0.5 text-xs text-muted-foreground truncate">
+                            {task.ownerId.trim()} · {task.campaignId}
+                          </p>
+                          <div className="mt-2 flex items-center gap-2 flex-wrap">
+                            <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-bold uppercase', priorityTone(task.priority))}>
+                              {task.priority}
+                            </span>
+                            {overdue && (
+                              <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-bold text-red-600 dark:bg-red-900/20 dark:text-red-400">
+                                Overdue
+                              </span>
+                            )}
+                            <span className="text-[10px] text-muted-foreground">
+                              Due {format(new Date(task.dueDate), 'MMM dd')}
+                            </span>
+                          </div>
+                        </div>
+                        <div className={cn(
+                          'shrink-0 flex h-5 w-5 items-center justify-center rounded-full border-2 transition-colors mt-0.5',
+                          selected ? 'border-gc-orange bg-gc-orange' : 'border-border'
+                        )}>
+                          {selected && (
+                            <svg viewBox="0 0 10 8" className="h-2.5 w-2.5 fill-white">
+                              <path d="M1 4l2.5 2.5L9 1" stroke="white" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                          )}
+                        </div>
                       </div>
-                      <div className={cn('rounded-full px-2 py-1 text-[10px] font-bold uppercase', priorityTone(task.priority))}>
-                        {task.priority}
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
           <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-4">
             <button onClick={resetDraft} className="rounded-lg border border-border px-4 py-2 text-sm font-bold hover:bg-accent">Reset</button>
